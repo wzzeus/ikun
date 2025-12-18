@@ -13,6 +13,8 @@ services:
     image: mysql:8.0
     container_name: chicken_king_db
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-chicken_king}
@@ -35,9 +37,6 @@ services:
       start_period: 30s
     networks:
       - chicken_king_network
-    # 生产环境不暴露端口到外网
-    # ports:
-    #   - "3306:3306"
 
   # ==========================================================================
   # Redis 缓存
@@ -144,6 +143,7 @@ services:
       DATABASE_URL: postgresql://${UMAMI_DB_USER:-umami}:${UMAMI_DB_PASSWORD:-umami_password}@umami-db:5432/${UMAMI_DB_NAME:-umami}
       DATABASE_TYPE: postgresql
       APP_SECRET: ${UMAMI_APP_SECRET}
+      BASE_PATH: /umami
     depends_on:
       umami-db:
         condition: service_healthy
