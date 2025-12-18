@@ -14,4 +14,3 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # 挂载日志目录
       - ./logs:/webhook/logs
-    working_dir: /opt/chicken-king
