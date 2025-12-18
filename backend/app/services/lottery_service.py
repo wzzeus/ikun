@@ -235,10 +235,9 @@ class LotteryService:
                 extra_message = f"获得{prize.prize_name}x1"
 
             elif prize.prize_type == PrizeType.API_KEY:
-                # 发放API Key，按用途（prize_value）从对应库存分配
-                # prize_value 存储用途类型，对应 api_key_codes.description
-                usage_type = prize.prize_value or "抽奖"  # 默认用途为"抽奖"
-                api_key_info = await LotteryService._assign_api_key(db, user_id, usage_type)
+                # 发放API Key，从库存分配
+                # 注意：prize_value 可能是额度数字或用途描述，优先使用"抽奖"类型
+                api_key_info = await LotteryService._assign_api_key(db, user_id, "抽奖")
                 if api_key_info:
                     api_key_code = api_key_info["code"]  # 完整兑换码
                     prize_value = api_key_info["code"][:8] + "****"  # 部分隐藏（用于显示和记录）
@@ -775,9 +774,8 @@ class LotteryService:
                 extra_message = f"获得{card.prize_name}x1"
 
             elif card.prize_type == PrizeType.API_KEY.value:
-                # 按用途（prize_value）从对应库存分配API Key
-                usage_type = card.prize_value or "刮刮乐"  # 默认用途为"刮刮乐"
-                api_key_info = await LotteryService._assign_api_key(db, user_id, usage_type)
+                # 发放API Key，从库存分配（优先使用"抽奖"类型的key）
+                api_key_info = await LotteryService._assign_api_key(db, user_id, "抽奖")
                 if api_key_info:
                     api_key_code = api_key_info["code"]  # 完整兑换码
                     prize_value = api_key_info["code"][:8] + "****"

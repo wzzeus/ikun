@@ -37,7 +37,9 @@ const toastConfig = {
 }
 
 // 单个 Toast 组件
-function ToastItem({ id, type = 'info', message, title, duration = 3000, onClose }) {
+// message 支持字符串或 React 节点
+// action: { label: string, onClick: () => void } 可选操作按钮
+function ToastItem({ id, type = 'info', message, title, duration = 3000, action, onClose }) {
   const [isVisible, setIsVisible] = useState(false)
   const [isLeaving, setIsLeaving] = useState(false)
   const config = toastConfig[type] || toastConfig.info
@@ -75,9 +77,23 @@ function ToastItem({ id, type = 'info', message, title, duration = 3000, onClose
         {title && (
           <p className={`font-medium ${config.textColor}`}>{title}</p>
         )}
-        <p className={`text-sm ${config.textColor} ${title ? 'opacity-80' : ''}`}>
+        <div className={`text-sm ${config.textColor} ${title ? 'opacity-80' : ''}`}>
           {message}
-        </p>
+        </div>
+        {action && (
+          <button
+            onClick={() => {
+              try {
+                action.onClick?.()
+              } finally {
+                handleClose()
+              }
+            }}
+            className={`mt-2 text-sm font-medium underline underline-offset-2 hover:opacity-80 transition-opacity ${config.textColor}`}
+          >
+            {action.label}
+          </button>
+        )}
       </div>
       <button
         onClick={handleClose}

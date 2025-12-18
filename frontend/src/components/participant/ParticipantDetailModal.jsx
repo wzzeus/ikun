@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Dialog,
   DialogContent,
@@ -415,6 +416,7 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
   const token = useAuthStore((s) => s.token)
   const isLoggedIn = !!token
   const toast = useToast()
+  const navigate = useNavigate()
 
   // 获取用户道具余额
   const fetchUserItems = useCallback(async () => {
@@ -442,6 +444,7 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
     setCheerData(null)
     setQuotaData(null)
     setQuotaLogs([])
+    setCheerMessage('')  // 清空留言输入框
     lastSyncedId.current = null
 
     const fetchDetails = async () => {
@@ -552,7 +555,15 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
   // 打气
   const handleCheer = useCallback(async (cheerType, message = null) => {
     if (!isLoggedIn) {
-      toast.warning('请先登录后再打气')
+      toast.warning('请先登录后再打气', {
+        action: {
+          label: '去登录',
+          onClick: () => {
+            onClose()
+            navigate('/login')
+          },
+        },
+      })
       return
     }
 
@@ -569,16 +580,38 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
       fetchUserItems() // 刷新道具余额
       toast.success('打气成功！')
     } catch (err) {
-      toast.error(err?.response?.data?.detail || '打气失败')
+      const detail = err?.response?.data?.detail || '打气失败'
+      // 如果是道具不足，提示去做任务
+      if (detail.includes('不足') || detail.includes('余额')) {
+        toast.warning(detail, {
+          action: {
+            label: '去做任务赚道具',
+            onClick: () => {
+              onClose()
+              navigate('/tasks')
+            },
+          },
+        })
+      } else {
+        toast.error(detail)
+      }
     } finally {
       setCheeringType(null)
     }
-  }, [isLoggedIn, participant, toast, fetchUserItems])
+  }, [isLoggedIn, participant, toast, fetchUserItems, navigate, onClose])
 
   // 发送打气留言（消耗1个打气道具）
   const handleSendCheerMessage = useCallback(async () => {
     if (!isLoggedIn) {
-      toast.warning('请先登录后再留言')
+      toast.warning('请先登录后再留言', {
+        action: {
+          label: '去登录',
+          onClick: () => {
+            onClose()
+            navigate('/login')
+          },
+        },
+      })
       return
     }
 
@@ -590,7 +623,15 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
     // 检查道具余额
     const cheerBalance = userItems['cheer'] || 0
     if (cheerBalance < 1) {
-      toast.warning('打气道具不足，需要1个打气')
+      toast.warning('打气道具不足，需要1个打气', {
+        action: {
+          label: '去做任务赚道具',
+          onClick: () => {
+            onClose()
+            navigate('/tasks')
+          },
+        },
+      })
       return
     }
 
@@ -608,11 +649,24 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
       fetchUserItems() // 刷新道具余额
       toast.success('留言发送成功')
     } catch (err) {
-      toast.error(err?.response?.data?.detail || '留言失败')
+      const detail = err?.response?.data?.detail || '留言失败'
+      if (detail.includes('不足') || detail.includes('余额')) {
+        toast.warning(detail, {
+          action: {
+            label: '去做任务赚道具',
+            onClick: () => {
+              onClose()
+              navigate('/tasks')
+            },
+          },
+        })
+      } else {
+        toast.error(detail)
+      }
     } finally {
       setSendingMessage(false)
     }
-  }, [isLoggedIn, participant, cheerMessage, toast, userItems, fetchUserItems])
+  }, [isLoggedIn, participant, cheerMessage, toast, userItems, fetchUserItems, navigate, onClose])
 
   if (!participant) return null
 

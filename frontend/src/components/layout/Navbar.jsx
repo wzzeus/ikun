@@ -274,7 +274,7 @@ function UserDropdown({ user, logout }) {
                       roleKey === 'reviewer' ? 'bg-gradient-to-r from-blue-400 via-cyan-500 to-blue-600' :
                       'bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500'
                     }`}
-                    style={{ width: `${Math.min((trustLevel + 1) * 20, 100)}%` }}
+                    style={{ width: `${trustLevel >= 3 ? 100 : Math.min((trustLevel + 1) * 25, 100)}%` }}
                   />
                 </div>
               </div>

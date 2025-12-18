@@ -210,6 +210,16 @@ class SlotMachineService:
         # 计算中奖
         win_type, multiplier, payout, is_jackpot = SlotMachineService.calculate_payout(config, reels)
 
+        # 大奖尝试额外发放 API Key（从 api_key_codes.description="彩蛋" 分配）
+        api_key_code = None
+        api_key_quota = None
+        if is_jackpot:
+            from app.services.lottery_service import LotteryService
+            api_key_info = await LotteryService._assign_api_key(db, user_id, "彩蛋")
+            if api_key_info:
+                api_key_code = api_key_info["code"]
+                api_key_quota = api_key_info["quota"]
+
         # 发放奖励
         if payout > 0:
             await PointsService.add_points(
@@ -251,6 +261,8 @@ class SlotMachineService:
             "payout_points": payout,
             "balance": balance,
             "is_jackpot": is_jackpot,
+            "api_key_code": api_key_code,
+            "api_key_quota": api_key_quota,
         }
 
     # ==================== 管理员方法 ====================

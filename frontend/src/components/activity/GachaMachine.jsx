@@ -3,7 +3,7 @@
  * 消耗积分随机获得积分/道具奖励
  */
 import { useState, useEffect, useRef } from 'react'
-import { Gift, Coins, Sparkles, Loader2, Star, Heart, Coffee, Zap, Pizza, HelpCircle, Ticket, Award } from 'lucide-react'
+import { Gift, Coins, Sparkles, Loader2, Star, Heart, Coffee, Zap, Pizza, HelpCircle, Ticket, Award, Key } from 'lucide-react'
 import api from '../../services/api'
 import { useToast } from '../Toast'
 import { trackLottery } from '../../utils/analytics'
@@ -151,6 +151,7 @@ const GACHA_COLORS = [
 const rewardIcons = {
   points: Coins,
   item: Gift,
+  api_key: Key,
 }
 
 // 道具图标映射
@@ -183,6 +184,11 @@ function getRewardDescription(prizeType, prizeValue, prizeName) {
   if (prizeType === 'badge') {
     return `徽章: ${prizeName}`
   }
+  if (prizeType === 'api_key') {
+    const quota = prizeValue?.quota ? `$${prizeValue.quota}` : ''
+    const code = prizeValue?.code ? `${String(prizeValue.code).slice(0, 8)}****` : ''
+    return `兑换码 ${quota} ${code}`.trim()
+  }
   return prizeName || '神秘奖励'
 }
 
@@ -198,6 +204,9 @@ function getRewardIcon(prizeType, prizeValue) {
   }
   if (prizeType === 'badge') {
     return Award
+  }
+  if (prizeType === 'api_key') {
+    return Key
   }
   return Gift
 }
@@ -300,15 +309,21 @@ export default function GachaMachine({ onBalanceUpdate }) {
       // 更新状态（包含次数和券数量）
       setStatus((prev) => {
         const newTickets = data.used_ticket ? Math.max(0, (prev.gacha_tickets || 0) - 1) : prev.gacha_tickets
-        const newTodayCount = (prev.today_count || 0) + 1
-        const newRemainingToday = Math.max(0, (prev.remaining_today || prev.daily_limit) - 1)
+        // 用券不消耗每日次数（后端只统计消耗积分的次数）
+        const newTodayCount = data.used_ticket ? prev.today_count : (prev.today_count || 0) + 1
+        // 使用 ?? 避免 remaining_today === 0 时错误地使用 daily_limit
+        const newRemainingToday = data.used_ticket
+          ? (prev.remaining_today ?? prev.daily_limit)
+          : Math.max(0, (prev.remaining_today ?? prev.daily_limit) - 1)
+        // can_play 逻辑：有券可以玩（不受每日限制），或者积分够且未达每日限制
+        const canPlayWithPoints = data.remaining_balance >= prev.cost && newRemainingToday > 0
         return {
           ...prev,
           user_balance: data.remaining_balance,
           gacha_tickets: newTickets,
           today_count: newTodayCount,
           remaining_today: newRemainingToday,
-          can_play: newRemainingToday > 0 && (newTickets > 0 || data.remaining_balance >= prev.cost),
+          can_play: newTickets > 0 || canPlayWithPoints,
         }
       })
 

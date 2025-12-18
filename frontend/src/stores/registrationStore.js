@@ -16,6 +16,59 @@ const safeString = (value) => {
 }
 
 /**
+ * 字段名中文映射
+ */
+const fieldNameMap = {
+  title: '项目名称',
+  summary: '项目简介',
+  description: '项目介绍',
+  plan: '实现计划',
+  tech_stack: '技术栈',
+  repo_url: '仓库地址',
+  email: '联系邮箱',
+  wechat: '微信号',
+  api_key: 'API Key',
+}
+
+/**
+ * 常见错误信息中文映射
+ */
+const errorMessageMap = {
+  'String should have at least 20 characters': '内容至少需要20个字符',
+  'String should have at least 10 characters': '内容至少需要10个字符',
+  'String should have at least 2 characters': '内容至少需要2个字符',
+  'String should have at most 200 characters': '内容不能超过200个字符',
+  'String should have at most 500 characters': '内容不能超过500个字符',
+  'String should have at most 2000 characters': '内容不能超过2000个字符',
+  'field required': '此项为必填',
+  'Field required': '此项为必填',
+  'value is not a valid email address': '请输入有效的邮箱地址',
+  'Invalid email format': '邮箱格式不正确',
+  'ensure this value has at least': '内容长度不足',
+}
+
+/**
+ * 翻译错误信息
+ */
+const translateErrorMessage = (msg) => {
+  if (!msg) return msg
+  // 精确匹配
+  if (errorMessageMap[msg]) return errorMessageMap[msg]
+  // 模糊匹配（处理带数字的情况）
+  for (const [pattern, translation] of Object.entries(errorMessageMap)) {
+    if (msg.includes(pattern.replace(/\d+/, ''))) {
+      // 提取数字
+      const numMatch = msg.match(/(\d+)/)
+      if (numMatch && translation.includes('个字符')) {
+        return translation.replace(/\d+/, numMatch[1])
+      }
+      return translation
+    }
+  }
+  return msg
+}
+
+/**
  * 获取错误信息
  * 处理 FastAPI 验证错误（数组）、字符串错误、对象错误等多种格式
  * 保证返回字符串类型
@@ -28,13 +81,14 @@ const getErrorMessage = (error) => {
   if (Array.isArray(detail)) {
     const messages = detail
       .map(err => {
-        if (typeof err === 'string') return err
+        if (typeof err === 'string') return translateErrorMessage(err)
         if (!err || typeof err !== 'object') return safeString(err)
         // 提取字段名（去掉 body/query/path 等前缀）
-        const field = Array.isArray(err.loc)
+        const rawField = Array.isArray(err.loc)
           ? err.loc.filter(p => !['body', 'query', 'path', 'header'].includes(p)).map(String).join('.')
           : ''
-        const msg = safeString(err.msg || err.message || '')
+        const field = fieldNameMap[rawField] || rawField
+        const msg = translateErrorMessage(safeString(err.msg || err.message || ''))
         return field && msg ? `${field}: ${msg}` : msg
       })
       .filter(Boolean)

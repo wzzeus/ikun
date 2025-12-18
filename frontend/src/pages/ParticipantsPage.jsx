@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Users, Code2, Calendar, Sparkles, Trophy, Search, Github, GitCommit, Plus, Minus, Heart, Coffee, Zap, Pizza, Star, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import api from '../services/api'
 import { useAuthStore } from '@/stores/authStore'
+import { useToast } from '@/components/Toast'
 import { cn } from '@/lib/utils'
 import ParticipantDetailModal from '@/components/participant/ParticipantDetailModal'
 
@@ -36,7 +37,9 @@ export default function ParticipantsPage() {
   const [selectedParticipant, setSelectedParticipant] = useState(null)
 
   const user = useAuthStore((s) => s.user)
-  const isLoggedIn = useAuthStore((s) => s.isLoggedIn)
+  const isLoggedIn = useAuthStore((s) => !!s.token)
+  const navigate = useNavigate()
+  const toast = useToast()
 
   // 获取选手列表
   useEffect(() => {
@@ -125,7 +128,12 @@ export default function ParticipantsPage() {
   // 打气
   const handleCheer = useCallback(async (registrationId, cheerType = 'cheer') => {
     if (!isLoggedIn) {
-      alert('请先登录后再打气')
+      toast.warning('请先登录后再打气', {
+        action: {
+          label: '去登录',
+          onClick: () => navigate('/login'),
+        },
+      })
       return
     }
 
@@ -141,12 +149,24 @@ export default function ParticipantsPage() {
         ...prev,
         [registrationId]: cheerRes,
       }))
+      toast.success('打气成功！')
     } catch (err) {
-      alert(err?.response?.data?.detail || '打气失败')
+      const detail = err?.response?.data?.detail || '打气失败'
+      // 如果是道具不足，提示去做任务
+      if (detail.includes('不足') || detail.includes('余额')) {
+        toast.warning(detail, {
+          action: {
+            label: '去做任务赚道具',
+            onClick: () => navigate('/tasks'),
+          },
+        })
+      } else {
+        toast.error(detail)
+      }
     } finally {
       setCheeringId(null)
     }
-  }, [isLoggedIn])
+  }, [isLoggedIn, navigate, toast])
 
   if (loading) {
     return (

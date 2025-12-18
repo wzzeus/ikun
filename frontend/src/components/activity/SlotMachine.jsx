@@ -84,6 +84,17 @@ function SlotWinModal({ result, symbols, onClose, onPlayAgain, canPlayAgain }) {
             <div className={`text-4xl font-bold ${isJackpot ? 'text-yellow-200' : 'text-green-200'}`}>
               +{result.points} 积分
             </div>
+            {result.apiKeyCode && (
+              <div className="mt-3 p-3 bg-white/10 rounded-lg border border-yellow-300/50">
+                <div className="text-sm text-yellow-200 mb-1">🎁 额外奖励：兑换码</div>
+                <div className="text-xs text-white/90 font-mono break-all select-all">
+                  {result.apiKeyCode}
+                </div>
+                {result.apiKeyQuota && (
+                  <div className="text-xs text-yellow-300 mt-1">额度：${result.apiKeyQuota}</div>
+                )}
+              </div>
+            )}
             {isJackpot && (
               <div className="flex items-center justify-center gap-1 mt-2 text-yellow-300">
                 <Star className="w-4 h-4" />
@@ -308,6 +319,8 @@ export default function SlotMachine({ onBalanceUpdate }) {
         points: payout,
         message,
         isJackpot,
+        apiKeyCode: spinResult.api_key_code,
+        apiKeyQuota: spinResult.api_key_quota,
       })
 
       // 更新余额和次数（使用后端返回的最新余额）
@@ -325,12 +338,14 @@ export default function SlotMachine({ onBalanceUpdate }) {
           message,
           isJackpot,
           reels: spinResult.reels,
+          apiKeyCode: spinResult.api_key_code,
+          apiKeyQuota: spinResult.api_key_quota,
         })
         setShowWinModal(true)
       } else {
         playSound('lose')
       }
-      trackLottery('slot', costPoints, win ? `${payout}积分` : '未中奖')
+      trackLottery('slot', costPoints, win ? (spinResult.api_key_code ? `中奖+兑换码` : `${payout}积分`) : '未中奖')
     }, totalDuration)
   }, [spinning, balance, costPoints, symbols, onBalanceUpdate, playSound, dailyLimit, todayCount])
 

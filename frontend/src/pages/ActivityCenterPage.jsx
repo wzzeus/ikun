@@ -798,14 +798,16 @@ export default function ActivityCenterPage() {
       setLotteryInfo((prev) => {
         const newTickets = result.used_ticket ? Math.max(0, (prev?.lottery_tickets || 0) - 1) : prev?.lottery_tickets
         const newTodayCount = (prev?.today_count || 0) + 1
+        // can_draw 逻辑：有券可以抽（不受每日限制），或者积分够且未达每日限制
+        const canDrawWithPoints = result.balance >= prev?.cost_points && (
+          prev?.daily_limit === null || newTodayCount < prev?.daily_limit
+        )
         return {
           ...prev,
           today_count: newTodayCount,
           balance: result.balance,
           lottery_tickets: newTickets,
-          can_draw: (newTickets > 0 || result.balance >= prev?.cost_points) && (
-            prev?.daily_limit === null || newTodayCount < prev?.daily_limit
-          ),
+          can_draw: newTickets > 0 || canDrawWithPoints,
         }
       })
       // 显示中奖庆祝弹窗

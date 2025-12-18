@@ -18,6 +18,7 @@ import ContestantCenterPage from './pages/ContestantCenterPage'
 import AchievementsPage from './pages/AchievementsPage'
 import ActivityCenterPage from './pages/ActivityCenterPage'
 import PredictionPage from './pages/PredictionPage'
+import PredictionListPage from './pages/PredictionListPage'
 import MyBetsPage from './pages/MyBetsPage'
 import TasksPage from './pages/TasksPage'
 import { useAuthStore } from './stores/authStore'
@@ -46,6 +47,7 @@ function App() {
           <Route path="achievements" element={<AchievementsPage />} />
           <Route path="activity" element={<ActivityCenterPage />} />
           <Route path="tasks" element={<TasksPage />} />
+          <Route path="prediction" element={<PredictionListPage />} />
           <Route path="prediction/:id" element={<PredictionPage />} />
           <Route path="my-bets" element={<MyBetsPage />} />
           <Route path="my-project" element={<ContestantCenterPage />} />

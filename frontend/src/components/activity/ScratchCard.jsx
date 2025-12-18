@@ -218,7 +218,7 @@ function ScratchCardSkeleton() {
 }
 
 // 刮刮乐卡片 Canvas
-function ScratchCanvas({ cardId, onReveal, revealed, prize }) {
+function ScratchCanvas({ cardId, onReveal, revealed, prize, onQuickReveal }) {
   const canvasRef = useRef(null)
   const [isScratching, setIsScratching] = useState(false)
   const [scratchPercent, setScratchPercent] = useState(0)
@@ -228,6 +228,22 @@ function ScratchCanvas({ cardId, onReveal, revealed, prize }) {
   const revealedRef = useRef(false)
   const lastCalcTime = useRef(0)
   const rafRef = useRef(null)
+
+  // 一键开奖
+  const handleQuickReveal = useCallback(() => {
+    if (revealedRef.current || revealed || autoRevealed) return
+    revealedRef.current = true
+    setAutoRevealed(true)
+    setScratchPercent(100)
+    onReveal()
+  }, [revealed, autoRevealed, onReveal])
+
+  // 将一键开奖方法暴露给父组件
+  useEffect(() => {
+    if (onQuickReveal) {
+      onQuickReveal(handleQuickReveal)
+    }
+  }, [onQuickReveal, handleQuickReveal])
 
   // 初始化 canvas
   useEffect(() => {
@@ -426,10 +442,21 @@ function ScratchCanvas({ cardId, onReveal, revealed, prize }) {
         />
       )}
 
-      {/* 进度提示 */}
-      {!revealed && !autoRevealed && scratchPercent > 0 && scratchPercent < 40 && (
-        <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
-          {Math.round(scratchPercent)}% - 继续刮
+      {/* 进度提示和一键开奖按钮 */}
+      {!revealed && !autoRevealed && (
+        <div className="absolute bottom-2 right-2 flex items-center gap-2">
+          {scratchPercent > 0 && scratchPercent < 40 && (
+            <div className="px-2 py-1 bg-black/50 text-white text-xs rounded">
+              {Math.round(scratchPercent)}% - 继续刮
+            </div>
+          )}
+          <button
+            onClick={handleQuickReveal}
+            className="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white text-xs font-medium rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center gap-1"
+          >
+            <Sparkles className="w-3 h-3" />
+            一键开奖
+          </button>
         </div>
       )}
     </div>
@@ -482,14 +509,16 @@ export default function ScratchCard({ onBalanceUpdate }) {
         // 如果使用了券，扣减券数量
         const newTickets = result.used_ticket ? Math.max(0, (prev?.scratch_tickets || 0) - 1) : prev?.scratch_tickets
         const newTodayCount = (prev?.today_count || 0) + 1
+        // can_draw 逻辑：有券可以玩（不受每日限制），或者积分够且未达每日限制
+        const canDrawWithPoints = result.remaining_balance >= prev?.cost_points && (
+          prev?.daily_limit === null || newTodayCount < prev?.daily_limit
+        )
         return {
           ...prev,
           today_count: newTodayCount,
           balance: result.remaining_balance,
           scratch_tickets: newTickets,
-          can_draw: (newTickets > 0 || result.remaining_balance >= prev?.cost_points) && (
-            prev?.daily_limit === null || newTodayCount < prev?.daily_limit
-          ),
+          can_draw: newTickets > 0 || canDrawWithPoints,
         }
       })
       onBalanceUpdate?.(result.remaining_balance)

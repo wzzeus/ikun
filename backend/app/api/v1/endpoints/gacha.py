@@ -1,10 +1,11 @@
 """
 扭蛋机 API
-消耗积分随机获得积分/道具奖励（不涉及彩蛋码）
+消耗积分随机获得积分/道具/徽章/API Key 兑换码
+（API Key 从 api_key_codes 表按用途分配）
 """
 import random
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
@@ -26,13 +27,15 @@ GACHA_DAILY_LIMIT = 30  # 每日限制次数
 
 # 奖池配置（总权重=100，权重即概率百分比）
 GACHA_PRIZES = [
-    # 积分奖励 (65%)
-    {"type": "points", "name": "10积分", "value": {"amount": 10}, "weight": 25, "is_rare": False},
+    # 积分奖励 (64.8%)
+    {"type": "points", "name": "10积分", "value": {"amount": 10}, "weight": 24.8, "is_rare": False},
     {"type": "points", "name": "30积分", "value": {"amount": 30}, "weight": 20, "is_rare": False},
     {"type": "points", "name": "50积分", "value": {"amount": 50}, "weight": 12, "is_rare": False},
     {"type": "points", "name": "100积分", "value": {"amount": 100}, "weight": 5, "is_rare": True},
     {"type": "points", "name": "200积分", "value": {"amount": 200}, "weight": 2, "is_rare": True},
     {"type": "points", "name": "500积分", "value": {"amount": 500}, "weight": 1, "is_rare": True},
+    # API Key 兑换码 (0.2%) - 从 api_key_codes.description="彩蛋" 分配
+    {"type": "api_key", "name": "神秘兑换码", "value": {"usage_type": "彩蛋"}, "weight": 0.2, "is_rare": True},
     # 道具奖励 (19%)
     {"type": "item", "name": "爱心x1", "value": {"item_type": "cheer", "amount": 1}, "weight": 8, "is_rare": False},
     {"type": "item", "name": "咖啡x1", "value": {"item_type": "coffee", "amount": 1}, "weight": 5, "is_rare": False},
@@ -199,6 +202,19 @@ async def get_today_gacha_count(db: AsyncSession, user_id: int) -> int:
     return result.scalar() or 0
 
 
+async def grant_api_key_reward(
+    db: AsyncSession,
+    user_id: int,
+    usage_type: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    分配 API Key 兑换码
+    从 api_key_codes 表按 description 用途分配
+    """
+    from app.services.lottery_service import LotteryService
+    return await LotteryService._assign_api_key(db, user_id, usage_type)
+
+
 # ========== API 接口 ==========
 
 @router.get("/status", response_model=GachaStatusResponse)
@@ -351,6 +367,34 @@ async def play_gacha(
                         "type": "points",
                         "value": {"amount": fallback_points}
                     }
+        elif prize["type"] == "api_key":
+            # 发放 API Key 兑换码
+            usage_type = prize["value"].get("usage_type") or "彩蛋"
+            api_key_info = await grant_api_key_reward(db, user_id, usage_type)
+            if api_key_info:
+                # 成功分配兑换码
+                prize = {
+                    **prize,
+                    "value": {
+                        "code": api_key_info["code"],
+                        "quota": api_key_info["quota"],
+                        "description": api_key_info["description"],
+                    },
+                }
+            else:
+                # 兑换码已发完，降级为积分补偿
+                fallback_points = 200
+                await grant_points_reward(
+                    db, user_id, fallback_points,
+                    f"扭蛋机中奖: {prize['name']}（兑换码已发完，补偿{fallback_points}积分）"
+                )
+                prize = {
+                    **prize,
+                    "name": f"{fallback_points}积分（兑换码已发完）",
+                    "type": "points",
+                    "value": {"amount": fallback_points},
+                    "is_rare": False,
+                }
 
         # 5. 记录任务进度
         from app.services.task_service import TaskService

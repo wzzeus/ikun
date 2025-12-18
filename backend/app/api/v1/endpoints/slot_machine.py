@@ -64,6 +64,8 @@ class SlotSpinResponse(BaseModel):
     payout_points: int
     balance: int
     is_jackpot: bool
+    api_key_code: Optional[str] = None
+    api_key_quota: Optional[float] = None
 
 
 class SlotConfigUpdateRequest(BaseModel):
