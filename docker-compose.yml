@@ -55,9 +55,6 @@ services:
     container_name: chicken_king_frontend
     ports:
       - "5174:5174"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:8000/api/v1
 
