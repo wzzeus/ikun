@@ -1,0 +1,196 @@
+# ============================================================================
+# 鸡王争霸赛 - 生产环境 Docker Compose
+# 使用: docker-compose -f docker-compose.prod.yml up -d
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # MySQL 数据库
+  # ==========================================================================
+  db:
+    image: mysql:8.0
+    container_name: chicken_king_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chicken_king}
+      MYSQL_USER: ${MYSQL_USER:-chicken}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/sql/init:/docker-entrypoint-initdb.d:ro
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max_connections=500
+      --innodb_buffer_pool_size=256M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - chicken_king_network
+    # 生产环境不暴露端口到外网
+    # ports:
+    #   - "3306:3306"
+
+  # ==========================================================================
+  # Redis 缓存
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: chicken_king_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chicken_king_network
+    # 生产环境不暴露端口到外网
+    # ports:
+    #   - "6379:6379"
+
+  # ==========================================================================
+  # FastAPI 后端
+  # ==========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: chicken_king_backend
+    restart: unless-stopped
+    environment:
+      - DEBUG=false
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=mysql+aiomysql://${MYSQL_USER:-chicken}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-chicken_king}
+      - REDIS_URL=redis://redis:6379/0
+      - FRONTEND_URL=${FRONTEND_URL}
+      - LINUX_DO_CLIENT_ID=${LINUX_DO_CLIENT_ID}
+      - LINUX_DO_CLIENT_SECRET=${LINUX_DO_CLIENT_SECRET}
+      - LINUX_DO_REDIRECT_URI=${LINUX_DO_REDIRECT_URI}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - chicken_king_network
+    # 内部网络，不直接暴露
+    expose:
+      - "8000"
+
+  # ==========================================================================
+  # React 前端 (Nginx)
+  # ==========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        - VITE_API_URL=${VITE_API_URL:-/api/v1}
+    container_name: chicken_king_frontend
+    restart: unless-stopped
+    networks:
+      - chicken_king_network
+    expose:
+      - "80"
+
+  # ==========================================================================
+  # Nginx 反向代理 (入口)
+  # ==========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: chicken_king_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - chicken_king_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Umami 统计分析 (可选)
+  # ==========================================================================
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    container_name: chicken_king_umami
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${UMAMI_DB_USER:-umami}:${UMAMI_DB_PASSWORD:-umami_password}@umami-db:5432/${UMAMI_DB_NAME:-umami}
+      DATABASE_TYPE: postgresql
+      APP_SECRET: ${UMAMI_APP_SECRET}
+    depends_on:
+      umami-db:
+        condition: service_healthy
+    networks:
+      - chicken_king_network
+    expose:
+      - "3000"
+    profiles:
+      - analytics
+
+  # ==========================================================================
+  # Umami PostgreSQL 数据库
+  # ==========================================================================
+  umami-db:
+    image: postgres:15-alpine
+    container_name: chicken_king_umami_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${UMAMI_DB_NAME:-umami}
+      POSTGRES_USER: ${UMAMI_DB_USER:-umami}
+      POSTGRES_PASSWORD: ${UMAMI_DB_PASSWORD:-umami_password}
+    volumes:
+      - umami_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${UMAMI_DB_USER:-umami}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chicken_king_network
+    profiles:
+      - analytics
+
+# ==========================================================================
+# 网络配置
+# ==========================================================================
+networks:
+  chicken_king_network:
+    driver: bridge
+
+# ==========================================================================
+# 数据卷
+# ==========================================================================
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  umami_db_data:
+    driver: local
