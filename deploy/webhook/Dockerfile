@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /webhook
 
 # 安装依赖
 RUN pip install --no-cache-dir flask gunicorn
@@ -18,7 +18,7 @@ COPY deploy.sh .
 RUN chmod +x deploy.sh
 
 # 创建日志目录
-RUN mkdir -p /app/logs
+RUN mkdir -p /webhook/logs
 
 EXPOSE 9000
 

@@ -13,5 +13,5 @@ services:
       # 挂载 docker socket，用于执行 docker compose
       - /var/run/docker.sock:/var/run/docker.sock
       # 挂载日志目录
-      - ./logs:/app/logs
+      - ./logs:/webhook/logs
     working_dir: /opt/chicken-king

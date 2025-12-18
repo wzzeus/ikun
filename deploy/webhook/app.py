@@ -14,8 +14,8 @@ app = Flask(__name__)
 
 # 配置
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your-webhook-secret-change-me')
-DEPLOY_SCRIPT = '/app/deploy.sh'
-LOG_FILE = '/app/logs/webhook.log'
+DEPLOY_SCRIPT = '/webhook/deploy.sh'
+LOG_FILE = '/webhook/logs/webhook.log'
 
 # 日志配置
 logging.basicConfig(
@@ -84,7 +84,7 @@ def webhook():
     try:
         subprocess.Popen(
             ['bash', DEPLOY_SCRIPT],
-            stdout=open('/app/logs/deploy.log', 'a'),
+            stdout=open('/webhook/logs/deploy.log', 'a'),
             stderr=subprocess.STDOUT,
             start_new_session=True
         )
@@ -103,7 +103,7 @@ def webhook():
 def logs():
     """查看最近的部署日志"""
     try:
-        with open('/app/logs/deploy.log', 'r') as f:
+        with open('/webhook/logs/deploy.log', 'r') as f:
             lines = f.readlines()[-100:]  # 最后100行
         return ''.join(lines), 200, {'Content-Type': 'text/plain'}
     except FileNotFoundError:
@@ -111,5 +111,5 @@ def logs():
 
 
 if __name__ == '__main__':
-    os.makedirs('/app/logs', exist_ok=True)
+    os.makedirs('/webhook/logs', exist_ok=True)
     app.run(host='0.0.0.0', port=9000)
