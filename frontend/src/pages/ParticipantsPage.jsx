@@ -47,10 +47,11 @@ export default function ParticipantsPage() {
       try {
         setLoading(true)
 
-        // 并行获取选手列表和 GitHub 统计
-        const [participantsRes, githubRes] = await Promise.all([
+        // 并行获取选手列表、GitHub 统计、批量打气统计
+        const [participantsRes, githubRes, cheersRes] = await Promise.all([
           api.get('/contests/1/registrations/public'),
           api.get('/contests/1/github-stats').catch(() => ({ items: [] })),
+          api.get('/contests/1/cheers/stats').catch(() => ({ data: {} })),
         ])
 
         const items = participantsRes.items || []
@@ -73,17 +74,8 @@ export default function ParticipantsPage() {
         }
         setGithubStats(statsMap)
 
-        // 获取每个选手的打气统计
-        const cheerMap = {}
-        for (const p of items) {
-          try {
-            const cheerRes = await api.get(`/registrations/${p.id}/cheers`)
-            cheerMap[p.id] = cheerRes
-          } catch {
-            cheerMap[p.id] = { stats: { total: 0 }, user_cheered_today: {} }
-          }
-        }
-        setCheerStats(cheerMap)
+        // 批量打气统计（避免 N+1 串行请求）
+        setCheerStats(cheersRes?.data || {})
 
       } catch (err) {
         setError(err?.response?.data?.detail || '加载失败')
@@ -113,12 +105,16 @@ export default function ParticipantsPage() {
   }, [searchQuery, participants])
 
   // 处理 URL 参数，自动打开对应选手的详情弹窗
+  const [initialTab, setInitialTab] = useState(null)
   useEffect(() => {
-    const highlightId = searchParams.get('highlight')
+    // 支持 id 和 highlight 两种参数
+    const highlightId = searchParams.get('highlight') || searchParams.get('id')
+    const tab = searchParams.get('tab') // 支持指定默认标签（如 cheer）
     if (highlightId && participants.length > 0) {
       const target = participants.find(p => String(p.id) === highlightId)
       if (target) {
         setSelectedParticipant(target)
+        setInitialTab(tab || null)
         // 清除 URL 参数
         setSearchParams({}, { replace: true })
       }
@@ -143,11 +139,25 @@ export default function ParticipantsPage() {
         cheer_type: cheerType,
       })
 
-      // 刷新该选手的打气统计
-      const cheerRes = await api.get(`/registrations/${registrationId}/cheers`)
+      // 刷新该选手的打气统计（复用单选手接口并转换为批量接口结构）
+      const cheerRes = await api.get(`/registrations/${registrationId}/cheers`).catch(() => null)
+
+      // 转换为批量接口的数据结构（保持按类型的 user_cheered_today）
+      const transformedCheer = cheerRes ? {
+        total: cheerRes.stats?.total || 0,
+        user_cheered_today: cheerRes.user_cheered_today || {},
+        cheer_types: {
+          cheer: cheerRes.stats?.cheer || 0,
+          coffee: cheerRes.stats?.coffee || 0,
+          energy: cheerRes.stats?.energy || 0,
+          pizza: cheerRes.stats?.pizza || 0,
+          star: cheerRes.stats?.star || 0,
+        },
+      } : { total: 0, user_cheered_today: {}, cheer_types: {} }
+
       setCheerStats(prev => ({
         ...prev,
-        [registrationId]: cheerRes,
+        [registrationId]: transformedCheer,
       }))
       toast.success('打气成功！')
     } catch (err) {
@@ -238,7 +248,7 @@ export default function ParticipantsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredParticipants.map((participant) => {
               const stats = githubStats[participant.id] || {}
-              const cheer = cheerStats[participant.id] || { stats: { total: 0 }, user_cheered_today: {} }
+              const cheer = cheerStats[participant.id] || { total: 0, cheer_types: {}, user_cheered_today: {} }
               const hasGithub = !!participant.repo_url
 
               return (
@@ -375,7 +385,7 @@ export default function ParticipantsPage() {
                       {/* 打气总数 */}
                       <div className="flex items-center gap-1.5 text-sm font-bold text-zinc-500">
                         <Heart className="w-4 h-4 text-red-400" />
-                        <span>{cheer.stats?.total || 0}</span>
+                        <span>{cheer.total || 0}</span>
                       </div>
                     </div>
 
@@ -396,7 +406,11 @@ export default function ParticipantsPage() {
       <ParticipantDetailModal
         participant={selectedParticipant}
         open={!!selectedParticipant}
-        onClose={() => setSelectedParticipant(null)}
+        onClose={() => {
+          setSelectedParticipant(null)
+          setInitialTab(null) // 重置初始标签
+        }}
+        initialTab={initialTab}
       />
     </div>
   )

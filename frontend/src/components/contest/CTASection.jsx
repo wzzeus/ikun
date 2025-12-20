@@ -56,9 +56,9 @@ export default function CTASection() {
   }
 
   return (
-    <section id="signup" className="py-20 text-center scroll-mt-20">
-      <div className="max-w-4xl mx-auto px-4">
-        <h2 className="text-4xl font-bold text-slate-800 dark:text-white mb-6">
+    <section id="signup" className="py-12 sm:py-16 lg:py-20 text-center scroll-mt-20">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 dark:text-white mb-6">
           各位制作人，机会只有一次 <span aria-hidden="true">🐔</span>
         </h2>
         <p className="text-slate-600 dark:text-slate-400 text-lg mb-10">

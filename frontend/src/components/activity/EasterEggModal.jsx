@@ -121,10 +121,19 @@ export default function EasterEggModal({ isOpen, onClose }) {
       }
     } catch (error) {
       console.error('领取彩蛋失败:', error)
+      const status = error.response?.status
       const errorMsg = error.response?.data?.detail || error.message
-      if (errorMsg.includes('登录') || error.response?.status === 401) {
+
+      if (status === 401 || errorMsg?.includes('登录')) {
         setStage('need_login')
         setMessage('登录后才能领取彩蛋哦~')
+      } else if (status === 429) {
+        setStage('error')
+        setMessage('操作太快啦，请稍等几秒再试~')
+      } else if (status === 500) {
+        setStage('error')
+        setMessage('服务器开小差了，请稍后再试~')
+        console.error('服务器错误详情:', errorMsg)
       } else {
         setStage('error')
         setMessage(errorMsg || '网络错误，请稍后再试')
@@ -291,22 +300,26 @@ export default function EasterEggModal({ isOpen, onClose }) {
             {stage === 'no_stock' && (
               <div className="text-center py-4">
                 <div className="w-24 h-24 mx-auto mb-6 relative">
-                  <Gift className="w-24 h-24 text-slate-400 dark:text-slate-500" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-4xl">😢</span>
+                  <Gift className="w-24 h-24 text-yellow-400 dark:text-yellow-500" />
+                  <div className="absolute -top-1 -right-1">
+                    <span className="text-2xl">✨</span>
                   </div>
                 </div>
 
                 <h2 className="text-xl font-bold text-slate-600 dark:text-slate-300 mb-4">
-                  彩蛋已被领完
+                  哇，你发现了彩蛋！
                 </h2>
 
+                <p className="text-slate-500 dark:text-slate-400 mb-4">
+                  可惜这批彩蛋已经被眼尖的小伙伴们领走啦~
+                </p>
+
                 <p className="text-slate-500 dark:text-slate-400 mb-6">
-                  {message}
+                  不过能找到这里，说明你也是真正的探索者！
                 </p>
 
                 <p className="text-sm text-slate-400 dark:text-slate-500">
-                  关注后续活动，会有更多惊喜哦~
+                  持续关注，下一波彩蛋等你来发现 🎁
                 </p>
               </div>
             )}

@@ -213,7 +213,7 @@ function ProjectCard({ project, rank, isActive }) {
                   </a>
                 )}
                 <Link
-                  to={`/participants?id=${project.id}`}
+                  to={`/participants?id=${project.id}&tab=cheer`}
                   className={`
                     flex items-center gap-2 px-8 py-3 rounded-xl font-black text-sm uppercase tracking-wider shadow-lg transition-all hover:scale-110 active:scale-95 hover:shadow-2xl
                     ${theme.badge}
@@ -239,7 +239,7 @@ function ProjectCard({ project, rank, isActive }) {
                 </a>
               )}
               <Link
-                to={`/participants?id=${project.id}`}
+                to={`/participants?id=${project.id}&tab=cheer`}
                 className={`
                   flex-1 flex justify-center items-center gap-2 px-6 py-4 rounded-xl font-black uppercase tracking-wider shadow-lg
                   ${theme.badge}
@@ -351,15 +351,24 @@ export default function HotProjectsCarousel() {
           ))}
         </div>
         
-        {/* 底部指示条 */}
+        {/* 底部指示条 - 扩大移动端点击区域 */}
         {projects.length > 1 && (
           <div className="flex justify-center gap-2 mt-8">
             {projects.map((_, index) => (
               <button
                 key={index}
                 onClick={() => setCurrentIndex(index)}
-                className={`h-1.5 rounded-full transition-all duration-500 ${index === currentIndex ? 'w-12 bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]' : 'w-2 bg-slate-300 dark:bg-slate-800'}`}
-              />
+                aria-label={`切换到第 ${index + 1} 个项目`}
+                className="p-2 -m-2 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
+              >
+                <span
+                  className={`block h-1.5 rounded-full transition-all duration-500 ${
+                    index === currentIndex
+                      ? 'w-12 bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]'
+                      : 'w-2 bg-slate-300 dark:bg-slate-800'
+                  }`}
+                />
+              </button>
             ))}
           </div>
         )}

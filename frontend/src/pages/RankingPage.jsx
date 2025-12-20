@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Crown, Trophy, Heart, Coffee, Zap, Pizza, Star, GitCommit, Flame, Sparkles, ThumbsUp } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Crown, Trophy, Heart, Coffee, Zap, Pizza, Star, GitCommit, Flame, Sparkles, ThumbsUp, Code2, Clock, Target } from 'lucide-react'
 import api from '../services/api'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +12,7 @@ const TABS = [
   { key: 'quota', label: '额度消耗排行榜', icon: Flame },
   { key: 'lucky', label: '欧皇榜', icon: Sparkles },
   { key: 'heat', label: '热力榜', icon: ThumbsUp },
+  { key: 'puzzle', label: '码神挑战榜', icon: Code2 },
 ]
 
 const MEDALS = {
@@ -82,6 +84,21 @@ function TabButton({ active, onClick, Icon, children }) {
   )
 }
 
+// 格式化用时
+function formatTime(seconds) {
+  if (!seconds || seconds === 0) return '-'
+  const hours = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  if (hours > 0) {
+    return `${hours}h ${mins}m`
+  }
+  if (mins > 0) {
+    return `${mins}m ${secs}s`
+  }
+  return `${secs}s`
+}
+
 function TopCard({ entry, rank, mode }) {
   if (!entry) return null
 
@@ -104,6 +121,10 @@ function TopCard({ entry, rank, mode }) {
     metricValue = entry?.heat_value ?? 0
     metricLabel = '热力值'
     showTitle = false // 热力榜显示用户，不显示项目名
+  } else if (mode === 'puzzle') {
+    metricValue = `${entry?.total_solved ?? 0}/42`
+    metricLabel = '通关进度'
+    showTitle = false // 码神挑战榜显示用户
   } else {
     metricValue = entry?.total ?? entry?.value ?? 0
     metricLabel = '提交数'
@@ -112,10 +133,10 @@ function TopCard({ entry, rank, mode }) {
   // 判断是否无限额度
   const isUnlimited = entry?.quota?.is_unlimited
 
-  // 欧皇榜和热力榜直接使用 entry 上的用户信息
-  const isUserMode = mode === 'lucky' || mode === 'heat'
+  // 欧皇榜、热力榜、码神挑战榜直接使用 entry 上的用户信息
+  const isUserMode = mode === 'lucky' || mode === 'heat' || mode === 'puzzle'
   const displayName = isUserMode
-    ? (entry?.display_name || entry?.username || '匿名用户')
+    ? (entry?.user?.display_name || entry?.user?.username || entry?.display_name || entry?.username || '匿名用户')
     : (entry?.user?.display_name || entry?.user?.username || '匿名选手')
 
   return (
@@ -130,7 +151,7 @@ function TopCard({ entry, rank, mode }) {
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
           <div className="relative">
-            <Avatar user={isUserMode ? entry : entry?.user} size={56} />
+            <Avatar user={isUserMode ? (entry?.user || entry) : entry?.user} size={56} />
             <div
               className={cn(
                 'absolute -bottom-2 -right-2 w-7 h-7 rounded-lg flex items-center justify-center ring-2 ring-white dark:ring-zinc-900',
@@ -141,6 +162,8 @@ function TopCard({ entry, rank, mode }) {
                 <Sparkles className={cn('w-4 h-4', medal?.crown)} />
               ) : mode === 'heat' ? (
                 <Flame className={cn('w-4 h-4', medal?.crown)} />
+              ) : mode === 'puzzle' ? (
+                <Code2 className={cn('w-4 h-4', medal?.crown)} />
               ) : (
                 <Crown className={cn('w-4 h-4', medal?.crown)} />
               )}
@@ -167,11 +190,25 @@ function TopCard({ entry, rank, mode }) {
                 ))}
               </div>
             )}
+            {mode === 'puzzle' && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {entry?.is_completed && (
+                  <span className="px-1.5 py-0.5 text-xs rounded bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 text-amber-700 dark:text-amber-300 font-bold">
+                    全程通关
+                  </span>
+                )}
+                {entry?.is_half && !entry?.is_completed && (
+                  <span className="px-1.5 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                    半程达成
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="text-right shrink-0">
           <div className="flex items-center justify-end gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-semibold">
-            {mode === 'lucky' ? <Sparkles className="w-4 h-4" /> : mode === 'heat' ? <ThumbsUp className="w-4 h-4" /> : <Trophy className="w-4 h-4" />}
+            {mode === 'lucky' ? <Sparkles className="w-4 h-4" /> : mode === 'heat' ? <ThumbsUp className="w-4 h-4" /> : mode === 'puzzle' ? <Target className="w-4 h-4" /> : <Trophy className="w-4 h-4" />}
             {metricLabel}
           </div>
           <div className="mt-1 text-3xl font-black text-zinc-900 dark:text-white tabular-nums">{metricValue}</div>
@@ -205,6 +242,23 @@ function TopCard({ entry, rank, mode }) {
           ))}
         </div>
       )}
+
+      {mode === 'puzzle' && (
+        <div className="mt-5 flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/50">
+            <Clock className="w-4 h-4 text-blue-500" />
+            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+              用时 {formatTime(entry?.total_time)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/50">
+            <Target className="w-4 h-4 text-orange-500" />
+            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+              错误 {entry?.total_errors ?? 0} 次
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -227,17 +281,21 @@ function Row({ entry, mode }) {
     value = entry?.heat_value ?? 0
     metricLabel = '热力值'
     showTitle = false
+  } else if (mode === 'puzzle') {
+    value = `${entry?.total_solved ?? 0}/42`
+    metricLabel = '通关进度'
+    showTitle = false
   } else {
     value = entry?.total ?? entry?.value ?? 0
     metricLabel = '提交数'
   }
 
-  const MetricIcon = mode === 'cheer' ? Heart : mode === 'quota' ? Flame : mode === 'lucky' ? Sparkles : mode === 'heat' ? Flame : GitCommit
+  const MetricIcon = mode === 'cheer' ? Heart : mode === 'quota' ? Flame : mode === 'lucky' ? Sparkles : mode === 'heat' ? Flame : mode === 'puzzle' ? Target : GitCommit
 
-  // 欧皇榜和热力榜使用 entry 上的用户信息
-  const isUserMode = mode === 'lucky' || mode === 'heat'
+  // 欧皇榜、热力榜、码神挑战榜使用 entry 上的用户信息
+  const isUserMode = mode === 'lucky' || mode === 'heat' || mode === 'puzzle'
   const displayName = isUserMode
-    ? (entry?.display_name || entry?.username || '匿名用户')
+    ? (entry?.user?.display_name || entry?.user?.username || entry?.display_name || entry?.username || '匿名用户')
     : (entry?.user?.display_name || entry?.user?.username || '匿名选手')
 
   // 额度查询失败的显示特殊样式
@@ -256,7 +314,7 @@ function Row({ entry, mode }) {
         <div className="w-12 h-10 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center font-black text-zinc-900 dark:text-white tabular-nums">
           #{entry?.rank ?? '-'}
         </div>
-        <Avatar user={isUserMode ? entry : entry?.user} size={44} />
+        <Avatar user={isUserMode ? (entry?.user || entry) : entry?.user} size={44} />
         <div className="min-w-0">
           <div className="font-bold text-zinc-900 dark:text-white truncate">
             {displayName}
@@ -281,6 +339,24 @@ function Row({ entry, mode }) {
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">{entry.stats[key]}</span>
                 </div>
               ))}
+            </div>
+          )}
+          {mode === 'puzzle' && (
+            <div className="flex flex-wrap gap-1.5 mt-0.5">
+              {entry?.is_completed && (
+                <span className="px-1.5 py-0.5 text-xs rounded bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 text-amber-700 dark:text-amber-300 font-bold">
+                  全程通关
+                </span>
+              )}
+              {entry?.is_half && !entry?.is_completed && (
+                <span className="px-1.5 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                  半程
+                </span>
+              )}
+              <div className="flex items-center gap-0.5">
+                <Clock className="w-3 h-3 text-blue-500" />
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{formatTime(entry?.total_time)}</span>
+              </div>
             </div>
           )}
         </div>
@@ -314,7 +390,10 @@ function Row({ entry, mode }) {
 }
 
 export default function RankingPage() {
-  const [activeTab, setActiveTab] = useState('cheer')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab') || 'cheer'
+  const validTabs = TABS.map(t => t.key)
+  const [activeTab, setActiveTab] = useState(validTabs.includes(initialTab) ? initialTab : 'cheer')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState({ items: [], total: 0 })
@@ -328,6 +407,7 @@ export default function RankingPage() {
     if (activeTab === 'quota') return '额度消耗排行榜'
     if (activeTab === 'lucky') return '欧皇榜'
     if (activeTab === 'heat') return '热力榜'
+    if (activeTab === 'puzzle') return '码神挑战榜'
     return '排行榜'
   }, [activeTab])
 
@@ -351,6 +431,8 @@ export default function RankingPage() {
         res = await api.get('/lottery/leaderboard', { params: { limit: 50 } })
       } else if (tab === 'heat') {
         res = await api.get('/votes/leaderboard', { params: { contest_id: CONTEST_ID, limit: 50 } })
+      } else if (tab === 'puzzle') {
+        res = await api.get('/puzzle/leaderboard', { params: { limit: 50 } })
       }
 
       // 忽略过期响应
@@ -438,7 +520,7 @@ export default function RankingPage() {
           ) : (
             <>
               {/* Top 3 Cards */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {top3[0] && <TopCard entry={top3[0]} rank={1} mode={activeTab} />}
                 {top3[1] && <TopCard entry={top3[1]} rank={2} mode={activeTab} />}
                 {top3[2] && <TopCard entry={top3[2]} rank={3} mode={activeTab} />}
@@ -458,7 +540,9 @@ export default function RankingPage() {
                         ? '基于稀有奖品中奖次数'
                         : activeTab === 'heat'
                           ? '基于用户打赏消耗的道具积分'
-                          : '基于累计提交数'}
+                          : activeTab === 'puzzle'
+                            ? '基于通关关卡数，同关卡数按用时排序'
+                            : '基于累计提交数'}
                 </div>
               </div>
 

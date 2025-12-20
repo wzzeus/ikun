@@ -3,10 +3,12 @@
  * 仅管理员可用，切换角色会同步修改数据库
  * 支持在不同角色间切换以测试功能
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronDown, Crown, CheckCircle, Zap, Coffee, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import api from '../../services/api'
+
+const ROLE_SWITCHER_KEY = 'dev_role_switcher_minimized'
 
 const ROLES = [
   {
@@ -40,9 +42,18 @@ const ROLES = [
 ]
 
 export default function DevRoleSwitcher() {
-  const [isMinimized, setIsMinimized] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(() => {
+    // 从 localStorage 读取状态，默认最小化
+    const saved = localStorage.getItem(ROLE_SWITCHER_KEY)
+    return saved !== null ? saved === 'true' : true
+  })
   const [switching, setSwitching] = useState(false)
   const [error, setError] = useState(null)
+
+  // 保存最小化状态到 localStorage
+  useEffect(() => {
+    localStorage.setItem(ROLE_SWITCHER_KEY, String(isMinimized))
+  }, [isMinimized])
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   // 记录用户的原始角色（首次加载时）

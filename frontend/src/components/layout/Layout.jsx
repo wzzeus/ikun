@@ -5,6 +5,9 @@ import Footer from './Footer'
 import DevRoleSwitcher from '../dev/DevRoleSwitcher'
 import AnnouncementBanner from '../contest/AnnouncementBanner'
 
+// 不显示 Footer 的页面路径
+const HIDE_FOOTER_PATHS = ['/code-challenge']
+
 /**
  * 页面布局组件
  *
@@ -12,6 +15,9 @@ import AnnouncementBanner from '../contest/AnnouncementBanner'
  */
 export default function Layout() {
   const location = useLocation()
+
+  // 是否隐藏 Footer
+  const hideFooter = HIDE_FOOTER_PATHS.includes(location.pathname)
 
   // 支持 hash 锚点滚动（用于报名区定位等场景）
   useEffect(() => {
@@ -40,7 +46,7 @@ export default function Layout() {
       <main className="flex-1">
         <Outlet />
       </main>
-      <Footer />
+      {!hideFooter && <Footer />}
       {/* 开发模式角色切换器 */}
       <DevRoleSwitcher />
     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   Calendar,
@@ -31,7 +31,24 @@ import {
   Info,
   Shield,
   Ticket,
+  Volume2,
+  VolumeX,
+  Music,
+  SkipForward,
 } from 'lucide-react'
+
+// 背景音乐列表
+import bgmDeadman from '../assets/sounds/Deadman.mp3'
+import bgmLlh from '../assets/sounds/llh.mp3'
+import bgmMb from '../assets/sounds/mb.mp3'
+import bgmSjsdehjm from '../assets/sounds/sjsdehjm.mp3'
+
+const BGM_LIST = [
+  { src: bgmDeadman, name: 'Deadman' },
+  { src: bgmLlh, name: '来来嗨' },
+  { src: bgmMb, name: '蜜蜂' },
+  { src: bgmSjsdehjm, name: '世界是的恶毒吉蜜' },
+]
 import GameHelpModal, { HelpButton } from '../components/activity/GameHelpModal'
 import BackpackModal from '../components/activity/BackpackModal'
 
@@ -97,21 +114,21 @@ function LotteryWinModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
 
   if (prize.prize_type === 'EMPTY') {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
-          <div className="relative p-6 text-center">
-            <div className="w-20 h-20 mx-auto mb-4 bg-slate-600 rounded-full flex items-center justify-center">
-              <Gift className="w-10 h-10 text-slate-400" />
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
+          <div className="relative p-4 sm:p-6 text-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-slate-600 rounded-full flex items-center justify-center">
+              <Gift className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">很遗憾</h3>
-            <p className="text-slate-400 mb-4">本次抽奖未中奖</p>
-            <div className="flex gap-3">
-              <button onClick={onClose} className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很遗憾</h3>
+            <p className="text-sm sm:text-base text-slate-400 mb-4">本次抽奖未中奖</p>
+            <div className="flex gap-2 sm:gap-3">
+              <button onClick={onClose} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
                 好的
               </button>
               {canPlayAgain && (
-                <button onClick={onPlayAgain} className="flex-1 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+                <button onClick={onPlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
                   再来一次
                 </button>
               )}
@@ -124,15 +141,15 @@ function LotteryWinModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-800 via-pink-800 to-rose-800'} rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-800 via-pink-800 to-rose-800'} rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
         {/* 装饰粒子 */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {[...Array(20)].map((_, i) => (
             <div
               key={i}
-              className={`absolute w-2 h-2 ${prize.is_rare ? 'bg-yellow-300' : 'bg-purple-300'} rounded-full animate-ping`}
+              className={`absolute w-1.5 h-1.5 sm:w-2 sm:h-2 ${prize.is_rare ? 'bg-yellow-300' : 'bg-purple-300'} rounded-full animate-ping`}
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
@@ -143,73 +160,73 @@ function LotteryWinModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
           ))}
         </div>
 
-        <div className="relative p-6 text-center">
+        <div className="relative p-4 sm:p-6 text-center">
           {/* 关闭按钮 */}
-          <button onClick={onClose} className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-white/70" />
+          <button onClick={onClose} className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4 sm:w-5 sm:h-5 text-white/70" />
           </button>
 
           {/* 奖励图标 */}
-          <div className="relative w-24 h-24 mx-auto mb-4">
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 sm:mb-4">
             <div className={`absolute inset-0 bg-gradient-to-br ${prize.is_rare ? 'from-yellow-400 to-orange-500' : 'from-purple-400 to-pink-500'} rounded-full shadow-2xl ${prize.is_rare ? 'animate-pulse' : ''}`}>
-              <div className="absolute top-3 left-4 w-6 h-6 bg-white/30 rounded-full" />
+              <div className="absolute top-2 sm:top-3 left-3 sm:left-4 w-5 sm:w-6 h-5 sm:h-6 bg-white/30 rounded-full" />
             </div>
             <div className="absolute inset-0 flex items-center justify-center">
-              <Icon className="w-12 h-12 text-white" />
+              <Icon className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
             </div>
           </div>
 
-          <h3 className="text-2xl font-bold text-white mb-2">
+          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
             {prize.is_rare ? '大奖来袭！' : '恭喜中奖！'}
           </h3>
 
           {/* 奖励展示 */}
-          <div className="bg-white/10 rounded-xl p-4 mb-4">
-            <div className={`text-2xl font-bold ${prize.is_rare ? 'text-yellow-300' : 'text-purple-200'}`}>
+          <div className="bg-white/10 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
+            <div className={`text-lg sm:text-2xl font-bold ${prize.is_rare ? 'text-yellow-300' : 'text-purple-200'}`}>
               {prize.prize_name}
             </div>
             {prize.is_rare && (
               <div className="flex items-center justify-center gap-1 mt-2 text-yellow-400">
-                <Star className="w-4 h-4" />
-                <span className="text-sm font-medium">稀有奖品</span>
-                <Star className="w-4 h-4" />
+                <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="text-xs sm:text-sm font-medium">稀有奖品</span>
+                <Star className="w-3 h-3 sm:w-4 sm:h-4" />
               </div>
             )}
 
             {/* API Key 兑换码显示区 */}
             {prize.prize_type === 'API_KEY' && prize.api_key_code && (
-              <div className="mt-3 p-3 bg-black/30 rounded-lg">
-                <p className="text-xs text-yellow-400/80 mb-2">兑换码（请妥善保存）</p>
+              <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-black/30 rounded-lg">
+                <p className="text-xs text-yellow-400/80 mb-1 sm:mb-2">兑换码（请妥善保存）</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-yellow-300 font-mono break-all select-all">
+                  <code className="flex-1 bg-black/40 px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm text-yellow-300 font-mono break-all select-all">
                     {prize.api_key_code}
                   </code>
                   <button
                     onClick={handleCopyCode}
-                    className={`p-2 rounded-lg transition-all ${
+                    className={`p-1.5 sm:p-2 rounded-lg transition-all ${
                       copied
                         ? 'bg-green-500/30 text-green-300'
                         : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
                     }`}
                     title={copied ? '已复制' : '复制兑换码'}
                   >
-                    {copied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                    {copied ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" /> : <Copy className="w-4 h-4 sm:w-5 sm:h-5" />}
                   </button>
                 </div>
-                <p className="text-xs text-white/50 mt-2">可在背包中随时查看已获得的兑换码</p>
+                <p className="text-xs text-white/50 mt-1 sm:mt-2">可在背包中随时查看已获得的兑换码</p>
               </div>
             )}
 
-            <p className="text-purple-200 text-sm mt-2">奖励已发放到您的账户</p>
+            <p className="text-purple-200 text-xs sm:text-sm mt-2">奖励已发放到您的账户</p>
           </div>
 
           {/* 按钮 */}
-          <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+          <div className="flex gap-2 sm:gap-3">
+            <button onClick={onClose} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
               好的
             </button>
             {canPlayAgain && (
-              <button onClick={onPlayAgain} className="flex-1 py-2.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+              <button onClick={onPlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
                 再来一次
               </button>
             )}
@@ -433,7 +450,7 @@ function SigninCalendar({ signinStatus, onSignin, signing }) {
 }
 
 // 抽奖转盘组件
-function LotteryWheel({ lotteryInfo, onDraw, drawing, lastPrize }) {
+function LotteryWheel({ lotteryInfo, onDraw, drawing, lastPrize, isAdmin }) {
   const [showHelp, setShowHelp] = useState(false)
   const prizes = lotteryInfo?.prizes || []
   const tickets = lotteryInfo?.lottery_tickets || 0
@@ -465,9 +482,14 @@ function LotteryWheel({ lotteryInfo, onDraw, drawing, lastPrize }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {lotteryInfo?.daily_limit && (
+          {lotteryInfo?.daily_limit && !isAdmin && (
             <div className="text-sm text-slate-500">
               今日: {lotteryInfo?.today_count || 0}/{lotteryInfo?.daily_limit}
+            </div>
+          )}
+          {isAdmin && (
+            <div className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+              ∞ 无限
             </div>
           )}
           <HelpButton onClick={() => setShowHelp(true)} />
@@ -543,17 +565,19 @@ function LotteryWheel({ lotteryInfo, onDraw, drawing, lastPrize }) {
 
       <button
         onClick={onDraw}
-        disabled={drawing || !lotteryInfo?.can_draw}
+        disabled={drawing || (!lotteryInfo?.can_draw && !isAdmin) || (isAdmin && lotteryInfo?.balance < lotteryInfo?.cost_points && (lotteryInfo?.lottery_tickets || 0) === 0)}
         className={`w-full py-3 rounded-xl font-bold text-lg transition-all ${
-          !lotteryInfo?.can_draw
+          (!lotteryInfo?.can_draw && !isAdmin) || (isAdmin && lotteryInfo?.balance < lotteryInfo?.cost_points && (lotteryInfo?.lottery_tickets || 0) === 0)
             ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
             : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-500/30'
         }`}
       >
         {drawing ? (
           <RefreshCw className="w-5 h-5 animate-spin mx-auto" />
-        ) : !lotteryInfo?.can_draw ? (
+        ) : !lotteryInfo?.can_draw && !isAdmin ? (
           lotteryInfo?.balance < lotteryInfo?.cost_points && (lotteryInfo?.lottery_tickets || 0) === 0 ? '积分不足' : '今日次数已用完'
+        ) : isAdmin && lotteryInfo?.balance < lotteryInfo?.cost_points && (lotteryInfo?.lottery_tickets || 0) === 0 ? (
+          '积分不足'
         ) : (lotteryInfo?.lottery_tickets || 0) > 0 ? (
           <span className="flex items-center justify-center gap-2">
             <Ticket className="w-5 h-5" />
@@ -631,10 +655,184 @@ function PredictionCard({ market }) {
 }
 
 
+// 背景音乐播放器组件
+function BgmPlayer() {
+  const audioRef = useRef(null)
+  const [isPlaying, setIsPlaying] = useState(true) // 默认播放
+  const [currentTrack, setCurrentTrack] = useState(0)
+  const [volume, setVolume] = useState(() => {
+    try {
+      return parseFloat(localStorage.getItem('activity_bgm_volume') || '0.3')
+    } catch {
+      return 0.3
+    }
+  })
+  const [showControls, setShowControls] = useState(false)
+
+  // 保存初始音量用于首次初始化
+  const initialVolumeRef = useRef(volume)
+
+  // 页面加载时自动播放
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    audio.volume = initialVolumeRef.current
+    // 尝试自动播放
+    const playPromise = audio.play()
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setIsPlaying(true)
+        })
+        .catch(() => {
+          // 浏览器阻止自动播放，等待用户交互
+          setIsPlaying(false)
+        })
+    }
+  }, [])
+
+  // 播放/暂停
+  const togglePlay = useCallback(() => {
+    if (!audioRef.current) return
+    if (isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    } else {
+      audioRef.current.play().catch(() => {})
+      setIsPlaying(true)
+    }
+  }, [isPlaying])
+
+  // 下一首
+  const nextTrack = useCallback(() => {
+    setCurrentTrack((prev) => (prev + 1) % BGM_LIST.length)
+  }, [])
+
+  // 当切换歌曲时重新播放
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    // 重置并播放新歌曲
+    audio.load()
+    if (isPlaying) {
+      audio.play().catch(() => {})
+    }
+  }, [currentTrack])
+
+  // 音量调节
+  const handleVolumeChange = useCallback((e) => {
+    const newVolume = parseFloat(e.target.value)
+    setVolume(newVolume)
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume
+    }
+    localStorage.setItem('activity_bgm_volume', String(newVolume))
+  }, [])
+
+  // 歌曲结束后自动播放下一首
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const handleEnded = () => {
+      nextTrack()
+    }
+
+    audio.addEventListener('ended', handleEnded)
+    return () => audio.removeEventListener('ended', handleEnded)
+  }, [nextTrack])
+
+  return (
+    <div className="fixed bottom-4 right-4 z-40">
+      <audio ref={audioRef} src={BGM_LIST[currentTrack].src} preload="auto" />
+
+      {/* 展开的控制面板 */}
+      {showControls && (
+        <div className="absolute bottom-14 right-0 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-4 min-w-[200px] animate-in slide-in-from-bottom-2">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Music className="w-4 h-4 text-purple-500" />
+              背景音乐
+            </span>
+            <button
+              onClick={() => setShowControls(false)}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+            >
+              <X className="w-4 h-4 text-slate-400" />
+            </button>
+          </div>
+
+          {/* 当前播放 */}
+          <div className="bg-slate-100 dark:bg-slate-700/50 rounded-lg p-2 mb-3">
+            <div className="text-xs text-slate-500 dark:text-slate-400">正在播放</div>
+            <div className="text-sm font-medium text-slate-800 dark:text-white truncate">
+              {BGM_LIST[currentTrack].name}
+            </div>
+          </div>
+
+          {/* 控制按钮 */}
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <button
+              onClick={togglePlay}
+              className={`p-3 rounded-full transition-all ${
+                isPlaying
+                  ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-900/30'
+              }`}
+            >
+              {isPlaying ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={nextTrack}
+              className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+              title="下一首"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* 音量调节 */}
+          <div className="flex items-center gap-2">
+            <VolumeX className="w-4 h-4 text-slate-400" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={volume}
+              onChange={handleVolumeChange}
+              className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full appearance-none cursor-pointer accent-purple-500"
+            />
+            <Volume2 className="w-4 h-4 text-slate-400" />
+          </div>
+        </div>
+      )}
+
+      {/* 悬浮按钮 */}
+      <button
+        onClick={() => setShowControls(!showControls)}
+        className={`p-3 rounded-full shadow-lg transition-all ${
+          isPlaying
+            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white animate-pulse'
+            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-600'
+        }`}
+        title={isPlaying ? '音乐播放中' : '播放背景音乐'}
+      >
+        <Music className="w-5 h-5" />
+      </button>
+    </div>
+  )
+}
+
 // 主页面
 export default function ActivityCenterPage() {
   const navigate = useNavigate()
   const token = useAuthStore((s) => s.token)
+  const user = useAuthStore((s) => s.user)
+  // 管理员不限次数
+  const isAdmin = user?.role === 'admin'
   const toast = useToast()
 
   // 独立的加载状态
@@ -668,6 +866,9 @@ export default function ActivityCenterPage() {
 
   // 竞猜帮助弹窗
   const [showPredictionHelp, setShowPredictionHelp] = useState(false)
+
+  // 兑换券刷新触发器
+  const [ticketRefreshTrigger, setTicketRefreshTrigger] = useState(0)
 
   // 加载余额
   const loadBalance = useCallback(async () => {
@@ -770,6 +971,21 @@ export default function ActivityCenterPage() {
         streak_display: result.streak_day,
         monthly_signins: [...(prev?.monthly_signins || []), result.signin_date],
       }))
+      // 同步更新抽奖组件的积分和可抽状态
+      setLotteryInfo((prev) => {
+        if (!prev) return prev
+        const newBalance = result.balance
+        const tickets = prev.lottery_tickets || 0
+        // 管理员不受每日限制
+        const canDrawWithPoints = newBalance >= prev.cost_points && (
+          isAdmin || prev.daily_limit === null || prev.today_count < prev.daily_limit
+        )
+        return {
+          ...prev,
+          balance: newBalance,
+          can_draw: tickets > 0 || canDrawWithPoints,
+        }
+      })
       toast.success(
         result.is_milestone
           ? result.milestone_message
@@ -785,7 +1001,9 @@ export default function ActivityCenterPage() {
   }
 
   const handleDraw = async () => {
-    if (drawing || !lotteryInfo?.can_draw) return
+    // 管理员只检查积分够不够，不检查每日限制
+    const adminCanDraw = isAdmin && lotteryInfo?.balance >= lotteryInfo?.cost_points
+    if (drawing || (!lotteryInfo?.can_draw && !adminCanDraw)) return
     setDrawing(true)
     setLastPrize(null)
     try {
@@ -798,9 +1016,9 @@ export default function ActivityCenterPage() {
       setLotteryInfo((prev) => {
         const newTickets = result.used_ticket ? Math.max(0, (prev?.lottery_tickets || 0) - 1) : prev?.lottery_tickets
         const newTodayCount = (prev?.today_count || 0) + 1
-        // can_draw 逻辑：有券可以抽（不受每日限制），或者积分够且未达每日限制
+        // can_draw 逻辑：有券可以抽（不受每日限制），或者积分够且未达每日限制（管理员不受限）
         const canDrawWithPoints = result.balance >= prev?.cost_points && (
-          prev?.daily_limit === null || newTodayCount < prev?.daily_limit
+          isAdmin || prev?.daily_limit === null || newTodayCount < prev?.daily_limit
         )
         return {
           ...prev,
@@ -831,11 +1049,23 @@ export default function ActivityCenterPage() {
   const handleDrawAgainFromModal = () => {
     setShowLotteryWinModal(false)
     setTimeout(() => {
-      if (lotteryInfo?.can_draw) {
+      // 管理员只检查积分够不够
+      const adminCanDraw = isAdmin && lotteryInfo?.balance >= lotteryInfo?.cost_points
+      if (lotteryInfo?.can_draw || adminCanDraw) {
         handleDraw()
       }
     }, 100)
   }
+
+  // 兑换成功后刷新游戏券状态
+  const handleExchangeSuccess = useCallback((itemType) => {
+    // 触发所有游戏组件刷新
+    setTicketRefreshTrigger(prev => prev + 1)
+    // 同时刷新抽奖信息（因为可能兑换了抽奖券）
+    loadLottery()
+    // 刷新背包
+    loadItems()
+  }, [loadLottery, loadItems])
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pt-24 pb-8">
@@ -869,7 +1099,10 @@ export default function ActivityCenterPage() {
             </button>
 
             {/* 积分显示 */}
-            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-100 to-orange-100 dark:from-yellow-900/30 dark:to-orange-900/30 rounded-xl">
+            <Link
+              to="/points-history"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-100 to-orange-100 dark:from-yellow-900/30 dark:to-orange-900/30 rounded-xl hover:from-yellow-200 hover:to-orange-200 dark:hover:from-yellow-800/40 dark:hover:to-orange-800/40 transition-colors group"
+            >
               <Coins className="w-5 h-5 text-yellow-600" />
               {balanceLoading ? (
                 <Skeleton className="w-12 h-6" />
@@ -881,7 +1114,8 @@ export default function ActivityCenterPage() {
                   <span className="text-sm text-yellow-600/80">积分</span>
                 </>
               )}
-            </div>
+              <ChevronRight className="w-4 h-4 text-yellow-600/60 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
           </div>
         </div>
 
@@ -919,17 +1153,18 @@ export default function ActivityCenterPage() {
               onDraw={handleDraw}
               drawing={drawing}
               lastPrize={lastPrize}
+              isAdmin={isAdmin}
             />
           )}
 
           {/* 扭蛋机 */}
-          <GachaMachine onBalanceUpdate={setBalance} />
+          <GachaMachine onBalanceUpdate={setBalance} externalBalance={balance} userRole={user?.role} refreshTrigger={ticketRefreshTrigger} />
         </div>
 
         {/* 刮刮乐区域 */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
           {/* 刮刮乐 */}
-          <ScratchCard onBalanceUpdate={setBalance} />
+          <ScratchCard onBalanceUpdate={setBalance} externalBalance={balance} userRole={user?.role} refreshTrigger={ticketRefreshTrigger} />
 
           {/* 刮刮乐说明 */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6">
@@ -988,102 +1223,102 @@ export default function ActivityCenterPage() {
           </div>
         </div>
 
-        {/* 老虎机区域 */}
+        {/* iKun转转乐区域 */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* 老虎机 */}
-          <SlotMachine onBalanceUpdate={setBalance} />
+          {/* iKun转转乐 */}
+          <SlotMachine onBalanceUpdate={setBalance} externalBalance={balance} userRole={user?.role} refreshTrigger={ticketRefreshTrigger} />
 
-          {/* 老虎机说明 */}
+          {/* iKun转转乐说明 */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl">
+              <div className="p-2.5 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl">
                 <Zap className="w-5 h-5 text-white" />
               </div>
-              <h3 className="font-bold text-slate-900 dark:text-white">老虎机奖池 · 30积分/次</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white">iKun转转乐 · 30积分/次</h3>
             </div>
 
-            {/* 奖励倍率表格 */}
+            {/* 大奖组合 */}
             <div className="space-y-2 mb-4">
-              {/* 头奖 - 7️⃣ */}
-              <div className="flex items-center justify-between p-2 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              {/* 姬霓太美 */}
+              <div className="flex items-center justify-between p-2 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 rounded-lg border border-purple-200 dark:border-purple-800">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">7️⃣7️⃣7️⃣</span>
-                  <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">头奖</span>
+                  <span className="text-sm">🐔→❓→🏔️→👨</span>
+                  <span className="text-sm font-medium text-purple-700 dark:text-purple-400">姬霓太美</span>
                 </div>
-                <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400">100倍 · 约1.7%</span>
+                <span className="text-sm font-bold text-purple-600 dark:text-purple-400">64倍</span>
               </div>
-              {/* 大奖 - 🍒 */}
-              <div className="flex items-center justify-between p-2 bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              {/* 4坤 */}
+              <div className="flex items-center justify-between p-2 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">🍒🍒🍒</span>
-                  <span className="text-sm font-medium text-red-700 dark:text-red-400">大奖</span>
+                  <span className="text-sm">👨👨👨👨</span>
+                  <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">4坤</span>
                 </div>
-                <span className="text-sm font-bold text-red-600 dark:text-red-400">50倍 · 约3.4%</span>
+                <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400">50倍</span>
               </div>
-              {/* 中奖 - 🔔 */}
-              <div className="flex items-center justify-between p-2 bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 rounded-lg">
+              {/* 4个相同 */}
+              <div className="flex items-center justify-between p-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">🔔🔔🔔</span>
-                  <span className="text-sm text-orange-700 dark:text-orange-400">中奖</span>
+                  <span className="text-sm">🐔🐔🐔🐔</span>
+                  <span className="text-sm text-green-700 dark:text-green-400">4🐔</span>
                 </div>
-                <span className="text-sm font-medium text-orange-600 dark:text-orange-400">20倍 · 约6.9%</span>
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">32倍</span>
               </div>
-              {/* 小奖们 */}
+              {/* 其他组合 */}
               <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">🍋🍋🍋</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">小奖</span>
+                  <span className="text-sm">👨👨👨</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">3坤连续</span>
                 </div>
-                <span className="text-sm text-slate-500">10倍 · 约10%</span>
-              </div>
-              <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">🍇🍇🍇</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">小奖</span>
-                </div>
-                <span className="text-sm text-slate-500">5倍 · 约14%</span>
+                <span className="text-sm text-slate-500">18倍</span>
               </div>
               <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">🍉🍉🍉</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">小奖</span>
+                  <span className="text-sm">🐔❓🏔️👨</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">鸡你不太美</span>
                 </div>
-                <span className="text-sm text-slate-500">3倍 · 约17%</span>
+                <span className="text-sm text-slate-500">16倍</span>
               </div>
               <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">⭐⭐⭐</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">安慰</span>
+                  <span className="text-sm">ABBA</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">对称</span>
                 </div>
-                <span className="text-sm text-slate-500">2倍 · 约21%</span>
+                <span className="text-sm text-slate-500">10倍</span>
               </div>
               <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">🎰🎰🎰</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">保底</span>
+                  <span className="text-sm">👨👨</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">2坤连续</span>
                 </div>
-                <span className="text-sm text-slate-500">1倍 · 约26%</span>
+                <span className="text-sm text-slate-500">10倍</span>
               </div>
             </div>
 
-            {/* 特殊规则提示 */}
-            <div className="p-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl mb-3">
-              <p className="text-xs text-purple-600 dark:text-purple-400">
-                <span className="font-medium">🎁 两图相同奖励：</span>任意两个相同图案可获得 <span className="font-bold">1.5倍</span> 奖励！
+            {/* Man! 特殊符号 */}
+            <div className="p-3 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl mb-3">
+              <p className="text-xs text-green-600 dark:text-green-400">
+                <span className="font-medium">🕺 Man! 符号：</span>出现就有奖励！1个=2倍，2个=5倍，3个=12倍，4个=30倍，还能抵消律师函！
               </p>
             </div>
 
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
+            {/* 律师函警告 */}
+            <div className="p-3 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl mb-3">
               <p className="text-xs text-red-600 dark:text-red-400">
-                <span className="font-medium">玩法：</span>每次30积分，每日限玩20次，祝你好运！
+                <span className="font-medium">⚖️ 律师函惩罚：</span>1个=-0.5倍，2个=-1.5倍，3个=-3倍，4个=-5倍+封禁1小时！
+              </p>
+            </div>
+
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+              <p className="text-xs text-purple-600 dark:text-purple-400">
+                <span className="font-medium">玩法：</span>4滚轴，每次30积分，每日限玩20次，小心律师函！
               </p>
             </div>
           </div>
         </div>
 
-        {/* 积分兑换商城 */}
+        {/* 积分商城 */}
         <div className="mb-8">
-          <ExchangeShop balance={balance} onBalanceUpdate={setBalance} />
+          <ExchangeShop balance={balance} onBalanceUpdate={setBalance} onExchangeSuccess={handleExchangeSuccess} />
         </div>
 
         {/* 竞猜区 */}
@@ -1255,9 +1490,12 @@ export default function ActivityCenterPage() {
           prize={lastPrize}
           onClose={handleCloseLotteryWinModal}
           onPlayAgain={handleDrawAgainFromModal}
-          canPlayAgain={lotteryInfo?.can_draw}
+          canPlayAgain={lotteryInfo?.can_draw || (isAdmin && lotteryInfo?.balance >= lotteryInfo?.cost_points)}
         />
       )}
+
+      {/* 背景音乐播放器 */}
+      <BgmPlayer />
     </div>
   )
 }

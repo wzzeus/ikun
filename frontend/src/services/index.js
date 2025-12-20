@@ -201,6 +201,12 @@ export const lotteryApi = {
  * 管理后台 API
  */
 export const adminApi2 = {
+  // 通用方法 - 用于动态 API 调用
+  get: (url, config) => api.get(url, config),
+  post: (url, data, config) => api.post(url, data, config),
+  put: (url, data, config) => api.put(url, data, config),
+  delete: (url, config) => api.delete(url, config),
+
   // 仪表盘
   getDashboard: () => api.get('/admin/dashboard'),
   getDashboardCharts: (days = 7) => api.get('/admin/dashboard/charts', { params: { days } }),
@@ -209,6 +215,7 @@ export const adminApi2 = {
   getUsers: (params) => api.get('/admin/users', { params }),
   updateUser: (userId, data) => api.put(`/admin/users/${userId}`, data),
   adjustPoints: (userId, data) => api.post(`/admin/users/${userId}/points`, data),
+  getUserPointsHistory: (userId, params) => api.get(`/admin/users/${userId}/points-history`, { params }),
 
   // 签到配置
   getSigninConfig: () => api.get('/admin/signin/config'),
@@ -255,8 +262,14 @@ export const adminApi2 = {
   getActivityStats: () => api.get('/admin/activity/stats'),
   getDailyStats: (date) => api.get('/admin/activity/stats/daily', { params: { date } }),
   getRangeStats: (startDate, endDate) => api.get('/admin/activity/stats/range', { params: { start_date: startDate, end_date: endDate } }),
+
+  // 积分商城管理
   getExchangeItemsAdmin: () => api.get('/admin/exchange/items'),
+  createExchangeItem: (data) => api.post('/admin/exchange/items', data),
   updateExchangeItem: (id, data) => api.put(`/admin/exchange/items/${id}`, data),
+  deleteExchangeItem: (id) => api.delete(`/admin/exchange/items/${id}`),
+  addExchangeItemStock: (id, quantity) => api.post(`/admin/exchange/items/${id}/add-stock`, null, { params: { quantity } }),
+  toggleExchangeItemStatus: (id) => api.post(`/admin/exchange/items/${id}/toggle`),
 
   // 老虎机管理
   getSlotMachineConfig: () => api.get('/slot-machine/admin/config'),

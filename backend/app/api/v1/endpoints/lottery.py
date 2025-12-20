@@ -122,7 +122,8 @@ async def draw(
     try:
         request_id = body.request_id if body else None
         use_ticket = body.use_ticket if body else False
-        result = await LotteryService.draw(db, current_user.id, request_id, use_ticket=use_ticket)
+        is_admin = current_user.role == "admin"
+        result = await LotteryService.draw(db, current_user.id, request_id, use_ticket=use_ticket, is_admin=is_admin)
 
         # 记录日志
         from app.services.log_service import log_lottery
@@ -254,7 +255,8 @@ async def buy_scratch_card(
     """购买刮刮乐（购买时确定奖品，但不返回给前端）"""
     try:
         use_ticket = body.use_ticket if body else False
-        result = await LotteryService.buy_scratch_card(db, current_user.id, use_ticket=use_ticket)
+        is_admin = current_user.role == "admin"
+        result = await LotteryService.buy_scratch_card(db, current_user.id, use_ticket=use_ticket, is_admin=is_admin)
         return ScratchBuyResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -346,82 +348,87 @@ async def claim_easter_egg(
     logger = logging.getLogger(__name__)
     user_id = current_user.id
 
-    # 1. 检查用户是否已经领取过彩蛋
-    existing_result = await db.execute(
-        select(ApiKeyCode).where(
-            and_(
-                ApiKeyCode.assigned_user_id == user_id,
-                ApiKeyCode.description == "彩蛋"
+    try:
+        # 1. 检查用户是否已经领取过彩蛋
+        existing_result = await db.execute(
+            select(ApiKeyCode).where(
+                and_(
+                    ApiKeyCode.assigned_user_id == user_id,
+                    ApiKeyCode.description == "彩蛋"
+                )
+            ).limit(1)
+        )
+        existing_key = existing_result.scalar_one_or_none()
+
+        if existing_key:
+            # 已经领取过，返回之前领取的
+            return EasterEggClaimResponse(
+                success=True,
+                code=existing_key.code,
+                quota=float(existing_key.quota) if existing_key.quota else 0,
+                message="你已经发现过这个彩蛋啦！这是你的专属奖励~",
+                has_stock=True
+            )
+
+        # 2. 查找可用的彩蛋 API Key（用途为"彩蛋"）
+        # 使用 FOR UPDATE SKIP LOCKED 避免并发冲突
+        result = await db.execute(
+            select(ApiKeyCode)
+            .where(
+                and_(
+                    ApiKeyCode.status == ApiKeyStatus.AVAILABLE,
+                    ApiKeyCode.description == "彩蛋"
+                )
+            )
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        api_key = result.scalar_one_or_none()
+
+        if not api_key:
+            return EasterEggClaimResponse(
+                success=False,
+                message="哎呀，彩蛋已经被小伙伴们领完了，下次早点来哦~",
+                has_stock=False
+            )
+
+        # 3. 分配给用户
+        now = datetime.utcnow()
+        update_result = await db.execute(
+            update(ApiKeyCode)
+            .where(
+                and_(
+                    ApiKeyCode.id == api_key.id,
+                    ApiKeyCode.status == ApiKeyStatus.AVAILABLE
+                )
+            )
+            .values(
+                status=ApiKeyStatus.ASSIGNED,
+                assigned_user_id=user_id,
+                assigned_at=now
             )
         )
-    )
-    existing_key = existing_result.scalar_one_or_none()
 
-    if existing_key:
-        # 已经领取过，返回之前领取的
+        if update_result.rowcount == 0:
+            # 被其他人抢走了
+            return EasterEggClaimResponse(
+                success=False,
+                message="手慢了一步，这个彩蛋被抢走了，再试一次吧！",
+                has_stock=True
+            )
+
+        await db.commit()
+
+        logger.info(f"彩蛋领取成功: user_id={user_id}, api_key_id={api_key.id}")
+
         return EasterEggClaimResponse(
             success=True,
-            code=existing_key.code,
-            quota=float(existing_key.quota) if existing_key.quota else 0,
-            message="你已经发现过这个彩蛋啦！这是你的专属奖励~",
+            code=api_key.code,
+            quota=float(api_key.quota) if api_key.quota else 0,
+            message="恭喜你发现了隐藏彩蛋！这是专属于你的奖励~",
             has_stock=True
         )
-
-    # 2. 查找可用的彩蛋 API Key（用途为"彩蛋"）
-    # 使用 FOR UPDATE SKIP LOCKED 避免并发冲突
-    result = await db.execute(
-        select(ApiKeyCode)
-        .where(
-            and_(
-                ApiKeyCode.status == ApiKeyStatus.AVAILABLE,
-                ApiKeyCode.description == "彩蛋"
-            )
-        )
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    )
-    api_key = result.scalar_one_or_none()
-
-    if not api_key:
-        return EasterEggClaimResponse(
-            success=False,
-            message="哎呀，彩蛋已经被小伙伴们领完了，下次早点来哦~",
-            has_stock=False
-        )
-
-    # 3. 分配给用户
-    now = datetime.utcnow()
-    update_result = await db.execute(
-        update(ApiKeyCode)
-        .where(
-            and_(
-                ApiKeyCode.id == api_key.id,
-                ApiKeyCode.status == ApiKeyStatus.AVAILABLE
-            )
-        )
-        .values(
-            status=ApiKeyStatus.ASSIGNED,
-            assigned_user_id=user_id,
-            assigned_at=now
-        )
-    )
-
-    if update_result.rowcount == 0:
-        # 被其他人抢走了
-        return EasterEggClaimResponse(
-            success=False,
-            message="手慢了一步，这个彩蛋被抢走了，再试一次吧！",
-            has_stock=True
-        )
-
-    await db.commit()
-
-    logger.info(f"彩蛋领取成功: user_id={user_id}, api_key_id={api_key.id}")
-
-    return EasterEggClaimResponse(
-        success=True,
-        code=api_key.code,
-        quota=float(api_key.quota) if api_key.quota else 0,
-        message="恭喜你发现了隐藏彩蛋！这是专属于你的奖励~",
-        has_stock=True
-    )
+    except Exception as e:
+        logger.error(f"彩蛋领取异常: user_id={user_id}, error={str(e)}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")

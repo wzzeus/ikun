@@ -27,8 +27,14 @@ router = APIRouter()
 # ========== 权限检查 ==========
 
 def require_admin(user: User):
-    """检查管理员权限"""
-    if user.role != "admin":
+    """检查管理员权限
+
+    支持角色切换场景：如果用户的 original_role 是 admin，即使当前 role 不是 admin 也允许访问。
+    这样管理员可以切换到其他角色测试功能，同时仍能访问管理后台。
+    """
+    # 优先检查 original_role（管理员切换角色后的真实身份）
+    real_role = user.original_role or user.role
+    if real_role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
 
@@ -94,22 +100,24 @@ class LotteryConfigCreateRequest(BaseModel):
 
 
 class PrizeUpdateRequest(BaseModel):
-    prize_name: Optional[str] = None
-    prize_type: Optional[str] = None
-    prize_value: Optional[str] = None
+    name: Optional[str] = None  # 前端使用 name
+    type: Optional[str] = None  # 前端使用 type
+    value: Optional[str] = None  # 前端使用 value
     weight: Optional[int] = None
     stock: Optional[int] = None
     is_rare: Optional[bool] = None
+    is_enabled: Optional[bool] = None
 
 
 class PrizeCreateRequest(BaseModel):
     config_id: int
-    prize_name: str
-    prize_type: str
-    prize_value: Optional[str] = None
+    name: str  # 前端使用 name
+    type: str  # 前端使用 type
+    value: Optional[str] = None  # 前端使用 value
     weight: int = 100
     stock: Optional[int] = None
     is_rare: bool = False
+    is_enabled: bool = True
 
 
 class ApiKeyCreateRequest(BaseModel):
@@ -281,54 +289,128 @@ async def get_dashboard_charts(
 async def list_users(
     search: Optional[str] = None,
     role: Optional[str] = None,
+    sort_by: Optional[str] = Query(None, description="排序字段: balance, total_earned, total_spent, created_at"),
+    sort_order: Optional[str] = Query("desc", description="排序方向: asc, desc"),
     limit: int = Query(20, le=100),
     offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取用户列表"""
+    """获取用户列表（带分页、总数和排序）"""
     require_admin(current_user)
 
-    query = select(User)
-    if search:
-        query = query.where(
-            (User.username.contains(search)) |
-            (User.display_name.contains(search)) |
-            (User.email.contains(search))
-        )
-    if role:
-        query = query.where(User.role == role)
+    # 按积分排序需要 JOIN UserPoints
+    if sort_by in ('balance', 'total_earned', 'total_spent'):
+        # 使用左外连接查询
+        base_query = select(User, UserPoints).outerjoin(UserPoints, User.id == UserPoints.user_id)
 
-    query = query.order_by(User.id.desc()).offset(offset).limit(limit)
-    result = await db.execute(query)
-    users = result.scalars().all()
+        if search:
+            base_query = base_query.where(
+                (User.username.contains(search)) |
+                (User.display_name.contains(search)) |
+                (User.email.contains(search))
+            )
+        if role:
+            base_query = base_query.where(User.role == role)
 
-    # 获取用户积分
-    user_ids = [u.id for u in users]
-    points_result = await db.execute(
-        select(UserPoints).where(UserPoints.user_id.in_(user_ids))
-    )
-    points_map = {p.user_id: p for p in points_result.scalars().all()}
+        # 查询总数（只需统计 User，不需要 JOIN）
+        count_query = select(func.count(User.id))
+        if search:
+            count_query = count_query.where(
+                (User.username.contains(search)) |
+                (User.display_name.contains(search)) |
+                (User.email.contains(search))
+            )
+        if role:
+            count_query = count_query.where(User.role == role)
+        total = await db.scalar(count_query) or 0
 
-    items = []
-    for u in users:
-        points = points_map.get(u.id)
-        items.append(UserListItem(
-            id=u.id,
-            username=u.username,
-            display_name=u.display_name,
-            email=u.email,
-            avatar_url=u.avatar_url,
-            role=u.role,
-            is_active=u.is_active,
-            trust_level=u.trust_level,
-            balance=points.balance if points and points.balance is not None else 0,
-            total_earned=points.total_earned if points and points.total_earned is not None else 0,
-            total_spent=points.total_spent if points and points.total_spent is not None else 0,
-            created_at=u.created_at.isoformat() if u.created_at else ""
-        ))
+        # 排序（二级排序键方向与主排序一致，确保分页稳定）
+        sort_column = getattr(UserPoints, sort_by, UserPoints.balance)
+        if sort_order == 'asc':
+            base_query = base_query.order_by(func.coalesce(sort_column, 0).asc(), User.id.asc())
+        else:
+            base_query = base_query.order_by(func.coalesce(sort_column, 0).desc(), User.id.desc())
 
-    return {"items": items}
+        # 分页
+        query = base_query.offset(offset).limit(limit)
+        result = await db.execute(query)
+        rows = result.all()
+
+        items = []
+        for row in rows:
+            u = row[0]  # User
+            points = row[1]  # UserPoints (可能为 None)
+            items.append(UserListItem(
+                id=u.id,
+                username=u.username,
+                display_name=u.display_name,
+                email=u.email,
+                avatar_url=u.avatar_url,
+                role=u.role,
+                is_active=u.is_active,
+                trust_level=u.trust_level,
+                balance=points.balance if points and points.balance is not None else 0,
+                total_earned=points.total_earned if points and points.total_earned is not None else 0,
+                total_spent=points.total_spent if points and points.total_spent is not None else 0,
+                created_at=u.created_at.isoformat() if u.created_at else ""
+            ))
+    else:
+        # 普通查询（按 User 字段排序）
+        base_query = select(User)
+        if search:
+            base_query = base_query.where(
+                (User.username.contains(search)) |
+                (User.display_name.contains(search)) |
+                (User.email.contains(search))
+            )
+        if role:
+            base_query = base_query.where(User.role == role)
+
+        # 查询总数
+        count_query = select(func.count()).select_from(base_query.subquery())
+        total = await db.scalar(count_query) or 0
+
+        # 排序（添加 User.id 作为稳定的二级排序键）
+        if sort_by == 'created_at':
+            if sort_order == 'asc':
+                base_query = base_query.order_by(User.created_at.asc(), User.id.asc())
+            else:
+                base_query = base_query.order_by(User.created_at.desc(), User.id.desc())
+        else:
+            base_query = base_query.order_by(User.id.desc())
+
+        # 分页查询
+        query = base_query.offset(offset).limit(limit)
+        result = await db.execute(query)
+        users = result.scalars().all()
+
+        # 获取用户积分
+        user_ids = [u.id for u in users]
+        points_result = await db.execute(
+            select(UserPoints).where(UserPoints.user_id.in_(user_ids))
+        ) if user_ids else None
+        points_map = {p.user_id: p for p in points_result.scalars().all()} if points_result else {}
+
+        items = []
+        for u in users:
+            points = points_map.get(u.id)
+            items.append(UserListItem(
+                id=u.id,
+                username=u.username,
+                display_name=u.display_name,
+                email=u.email,
+                avatar_url=u.avatar_url,
+                role=u.role,
+                is_active=u.is_active,
+                trust_level=u.trust_level,
+                balance=points.balance if points and points.balance is not None else 0,
+                total_earned=points.total_earned if points and points.total_earned is not None else 0,
+                total_spent=points.total_spent if points and points.total_spent is not None else 0,
+                created_at=u.created_at.isoformat() if u.created_at else ""
+            ))
+
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.put("/users/{user_id}")
@@ -396,6 +478,69 @@ async def adjust_user_points(
         "success": True,
         "balance": user_points.balance,
         "message": f"积分调整成功，当前余额: {user_points.balance}"
+    }
+
+
+@router.get("/users/{user_id}/points-history")
+async def get_user_points_history(
+    user_id: int,
+    limit: int = Query(20, le=100),
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取指定用户的积分流水（管理员）"""
+    require_admin(current_user)
+
+    # 查询用户信息
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 查询总数
+    count_query = select(func.count(PointsLedger.id)).where(PointsLedger.user_id == user_id)
+    total = await db.scalar(count_query) or 0
+
+    # 查询流水记录
+    query = (
+        select(PointsLedger)
+        .where(PointsLedger.user_id == user_id)
+        .order_by(PointsLedger.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    ledger_items = result.scalars().all()
+
+    # 获取用户当前积分
+    points_result = await db.execute(select(UserPoints).where(UserPoints.user_id == user_id))
+    user_points = points_result.scalar_one_or_none()
+
+    return {
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+        },
+        "current_balance": user_points.balance if user_points else 0,
+        "total_earned": user_points.total_earned if user_points else 0,
+        "total_spent": user_points.total_spent if user_points else 0,
+        "items": [
+            {
+                "id": item.id,
+                "amount": item.amount,
+                "balance_after": item.balance_after,
+                "reason": item.reason.value if hasattr(item.reason, 'value') else item.reason,
+                "description": item.description,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+            }
+            for item in ledger_items
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset
     }
 
 
@@ -527,18 +672,19 @@ async def get_lottery_configs(
             "prizes": [
                 {
                     "id": p.id,
-                    "prize_name": p.prize_name,
-                    "prize_type": p.prize_type.value,
-                    "prize_value": p.prize_value,
+                    "name": p.prize_name,  # 前端使用 name
+                    "type": p.prize_type.value,  # 前端使用 type
+                    "value": p.prize_value,  # 前端使用 value
                     "weight": p.weight,
                     "stock": p.stock,
-                    "is_rare": p.is_rare
+                    "is_rare": p.is_rare,
+                    "is_enabled": getattr(p, 'is_enabled', True)  # 兼容旧数据
                 }
                 for p in prizes
             ]
         })
 
-    return {"items": items}
+    return {"configs": items}
 
 
 @router.post("/lottery/configs")
@@ -612,12 +758,13 @@ async def create_prize(
     from app.models.points import PrizeType
     prize = LotteryPrize(
         config_id=request.config_id,
-        prize_name=request.prize_name,
-        prize_type=PrizeType(request.prize_type),
-        prize_value=request.prize_value,
+        prize_name=request.name,  # 前端使用 name
+        prize_type=PrizeType(request.type),  # 前端使用 type
+        prize_value=request.value,  # 前端使用 value
         weight=request.weight,
         stock=request.stock,
-        is_rare=request.is_rare
+        is_rare=request.is_rare,
+        is_enabled=request.is_enabled
     )
     db.add(prize)
     await db.commit()
@@ -643,19 +790,22 @@ async def update_prize(
     if not prize:
         raise HTTPException(status_code=404, detail="奖品不存在")
 
-    if request.prize_name is not None:
-        prize.prize_name = request.prize_name
-    if request.prize_type is not None:
+    # 使用前端字段名映射到数据库字段
+    if request.name is not None:
+        prize.prize_name = request.name
+    if request.type is not None:
         from app.models.points import PrizeType
-        prize.prize_type = PrizeType(request.prize_type)
-    if request.prize_value is not None:
-        prize.prize_value = request.prize_value
+        prize.prize_type = PrizeType(request.type)
+    if request.value is not None:
+        prize.prize_value = request.value
     if request.weight is not None:
         prize.weight = request.weight
     if request.stock is not None:
         prize.stock = request.stock
     if request.is_rare is not None:
         prize.is_rare = request.is_rare
+    if request.is_enabled is not None:
+        prize.is_enabled = request.is_enabled
 
     await db.commit()
     return {"success": True}
@@ -1148,19 +1298,19 @@ async def get_system_logs(
     action: Optional[str] = None,
     user_id: Optional[int] = None,
     search: Optional[str] = None,
-    limit: int = Query(50, le=200),
-    offset: int = 0,
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量，默认10"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取系统操作日志"""
+    """获取系统操作日志（带分页）"""
     require_admin(current_user)
 
-    # 尝试从 SystemLog 表获取日志
     try:
         from app.models.system_log import SystemLog
         from sqlalchemy.orm import selectinload
 
+        # 构建基础查询
         query = select(SystemLog).options(selectinload(SystemLog.user))
 
         if action:
@@ -1168,12 +1318,26 @@ async def get_system_logs(
         if user_id:
             query = query.where(SystemLog.user_id == user_id)
         if search:
-            query = query.where(
+            # 搜索支持：描述、IP、用户名
+            query = query.join(User, SystemLog.user_id == User.id, isouter=True).where(
                 (SystemLog.description.contains(search)) |
-                (SystemLog.ip_address.contains(search))
+                (SystemLog.ip_address.contains(search)) |
+                (User.username.contains(search)) |
+                (User.display_name.contains(search))
             )
 
-        query = query.order_by(SystemLog.created_at.desc()).offset(offset).limit(limit)
+        # 总数统计
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query) or 0
+
+        # 计算分页
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+        # 校正页码（防止请求的页码超出范围）
+        actual_page = min(page, total_pages) if total_pages > 0 else 1
+        offset = (actual_page - 1) * page_size
+
+        # 分页查询
+        query = query.order_by(SystemLog.created_at.desc()).offset(offset).limit(page_size)
         result = await db.execute(query)
         logs = result.scalars().all()
 
@@ -1194,13 +1358,26 @@ async def get_system_logs(
                     } if log.user else None,
                 }
                 for log in logs
-            ]
+            ],
+            "total": total,
+            "page": actual_page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "has_next": actual_page < total_pages,
+            "has_prev": actual_page > 1 and total_pages > 0,
         }
     except Exception as e:
-        # 如果 SystemLog 表不存在，返回空列表
         import logging
         logging.warning(f"SystemLog query failed: {e}")
-        return {"items": []}
+        return {
+            "items": [],
+            "total": 0,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": 0,
+            "has_next": False,
+            "has_prev": False,
+        }
 
 
 # ========== 请求日志（全量 API 监控） ==========
@@ -1805,3 +1982,126 @@ async def update_exchange_item(
 
     await db.commit()
     return {"success": True, "message": "更新成功"}
+
+
+class ExchangeItemCreateRequest(BaseModel):
+    """创建兑换商品"""
+    name: str
+    description: Optional[str] = None
+    item_type: str  # LOTTERY_TICKET, SCRATCH_TICKET, GACHA_TICKET, API_KEY, ITEM
+    item_value: Optional[str] = None
+    cost_points: int
+    stock: Optional[int] = None
+    daily_limit: Optional[int] = None
+    total_limit: Optional[int] = None
+    icon: Optional[str] = None
+    is_hot: bool = False
+    is_active: bool = True
+    sort_order: int = 0
+
+
+@router.post("/exchange/items")
+async def create_exchange_item_admin(
+    request: ExchangeItemCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """创建兑换商品（管理员）"""
+    require_admin(current_user)
+
+    from app.models.points import ExchangeItemType
+
+    try:
+        item_type = ExchangeItemType(request.item_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"无效的商品类型: {request.item_type}")
+
+    item = ExchangeItem(
+        name=request.name,
+        description=request.description,
+        item_type=item_type,
+        item_value=request.item_value,
+        cost_points=request.cost_points,
+        stock=request.stock,
+        daily_limit=request.daily_limit,
+        total_limit=request.total_limit,
+        icon=request.icon,
+        is_hot=request.is_hot,
+        is_active=request.is_active,
+        sort_order=request.sort_order
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+
+    return {"success": True, "id": item.id, "message": "商品创建成功"}
+
+
+@router.delete("/exchange/items/{item_id}")
+async def delete_exchange_item_admin(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """删除兑换商品（管理员）"""
+    require_admin(current_user)
+
+    result = await db.execute(
+        select(ExchangeItem).where(ExchangeItem.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="商品不存在")
+
+    await db.delete(item)
+    await db.commit()
+    return {"success": True, "message": "商品删除成功"}
+
+
+@router.post("/exchange/items/{item_id}/add-stock")
+async def add_item_stock_admin(
+    item_id: int,
+    quantity: int = Query(..., ge=1, description="添加的库存数量"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """补充商品库存（管理员）"""
+    require_admin(current_user)
+
+    result = await db.execute(
+        select(ExchangeItem).where(ExchangeItem.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="商品不存在")
+
+    if item.stock is None:
+        return {"success": True, "message": "该商品为无限库存", "stock": None}
+
+    item.stock += quantity
+    await db.commit()
+
+    return {"success": True, "message": f"已补充{quantity}个库存", "stock": item.stock}
+
+
+@router.post("/exchange/items/{item_id}/toggle")
+async def toggle_item_status_admin(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """切换商品上架/下架状态（管理员）"""
+    require_admin(current_user)
+
+    result = await db.execute(
+        select(ExchangeItem).where(ExchangeItem.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="商品不存在")
+
+    item.is_active = not item.is_active
+    await db.commit()
+
+    status = "上架" if item.is_active else "下架"
+    return {"success": True, "message": f"商品已{status}", "is_active": item.is_active}

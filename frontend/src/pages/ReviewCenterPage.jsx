@@ -149,20 +149,20 @@ export default function ReviewCenterPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pt-24 pb-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* 页面标题 */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-xl shadow-lg">
-              <Award className="w-6 h-6 text-white" />
+            <div className="p-2 sm:p-3 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-xl shadow-lg">
+              <Award className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">评审中心</h1>
-              <p className="text-slate-500 dark:text-slate-400 text-sm">为参赛作品评分打分</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">评审中心</h1>
+              <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm">为参赛作品评分打分</p>
             </div>
           </div>
           <button
             onClick={loadData}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm sm:text-base"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             刷新
@@ -251,42 +251,42 @@ export default function ReviewCenterPage() {
                 >
                   {/* 卡片头部 */}
                   <div
-                    className="p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                    className="p-3 sm:p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     onClick={() => setExpandedId(isExpanded ? null : sub.id)}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex items-start gap-3 sm:gap-4">
                         <img
                           src={sub.contestant?.avatar_url || `https://ui-avatars.com/api/?name=${sub.contestant?.username}`}
                           alt={sub.contestant?.display_name}
-                          className="w-12 h-12 rounded-full"
+                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex-shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-slate-900 dark:text-white truncate">{sub.title}</h3>
-                          <p className="text-sm text-slate-500 mt-0.5">
+                          <h3 className="font-semibold text-slate-900 dark:text-white truncate text-sm sm:text-base">{sub.title}</h3>
+                          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
                             {sub.contestant?.display_name || sub.contestant?.username} ·
                             <span className="ml-1">
                               {sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : '未提交'}
                             </span>
                           </p>
                           {sub.description && (
-                            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 line-clamp-1">
+                            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1 line-clamp-1">
                               {sub.description}
                             </p>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 pl-13 sm:pl-0">
                         {/* 我的评分 */}
                         {hasReview ? (
-                          <div className="flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
-                            <Star className="w-4 h-4 text-green-600 dark:text-green-400 fill-current" />
-                            <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                          <div className="flex items-center gap-1 px-2 sm:px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
+                            <Star className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 dark:text-green-400 fill-current" />
+                            <span className="text-xs sm:text-sm font-bold text-green-600 dark:text-green-400">
                               {sub.my_review.score}
                             </span>
                           </div>
                         ) : (
-                          <Badge variant="secondary" className="text-yellow-600 dark:text-yellow-400">
+                          <Badge variant="secondary" className="text-yellow-600 dark:text-yellow-400 text-xs">
                             <Clock className="w-3 h-3 mr-1" />
                             待评分
                           </Badge>
@@ -296,7 +296,7 @@ export default function ReviewCenterPage() {
                           <div className="text-xs text-slate-500">
                             {sub.stats.review_count} 人评分
                           </div>
-                          <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          <div className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
                             {sub.stats.final_score !== null
                               ? `最终分: ${parseFloat(sub.stats.final_score).toFixed(1)}`
                               : '评分中'}
@@ -304,9 +304,9 @@ export default function ReviewCenterPage() {
                         </div>
                         {/* 展开/收起 */}
                         {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-slate-400" />
+                          <ChevronUp className="w-5 h-5 text-slate-400 flex-shrink-0" />
                         ) : (
-                          <ChevronDown className="w-5 h-5 text-slate-400" />
+                          <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0" />
                         )}
                       </div>
                     </div>
@@ -353,7 +353,7 @@ export default function ReviewCenterPage() {
                         {/* 评分统计 */}
                         <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
                           <h4 className="text-sm font-medium text-slate-500 mb-2">评分统计</h4>
-                          <div className="grid grid-cols-4 gap-4 text-center">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-center">
                             <div>
                               <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
                                 {sub.stats.review_count}
@@ -401,13 +401,13 @@ export default function ReviewCenterPage() {
 
                         {/* 评分表单 */}
                         {isScoring ? (
-                          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 sm:p-4 border border-blue-200 dark:border-blue-800">
                             <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-3">
                               {hasReview ? '修改评分' : '提交评分'}
                             </h4>
                             <div className="space-y-3">
                               <div>
-                                <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                                <label className="block text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-1">
                                   评分 (1-100)
                                 </label>
                                 <input
@@ -416,12 +416,12 @@ export default function ReviewCenterPage() {
                                   max="100"
                                   value={scoreInput}
                                   onChange={(e) => setScoreInput(e.target.value)}
-                                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                   placeholder="请输入 1-100 的分数"
                                 />
                               </div>
                               <div>
-                                <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                                <label className="block text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-1">
                                   评审意见（可选）
                                 </label>
                                 <textarea
@@ -429,22 +429,22 @@ export default function ReviewCenterPage() {
                                   onChange={(e) => setCommentInput(e.target.value)}
                                   rows={3}
                                   maxLength={2000}
-                                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
                                   placeholder="可以填写评审意见..."
                                 />
                               </div>
-                              <div className="flex items-center gap-3">
+                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                                 <button
                                   onClick={() => handleSubmitScore(sub.id)}
                                   disabled={submitting}
-                                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm"
                                 >
                                   <Send className="w-4 h-4" />
                                   {submitting ? '提交中...' : '提交评分'}
                                 </button>
                                 <button
                                   onClick={handleCancelScoring}
-                                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-sm"
                                 >
                                   取消
                                 </button>
@@ -452,7 +452,7 @@ export default function ReviewCenterPage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-3 pt-2">
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 pt-2">
                             {hasReview ? (
                               <>
                                 <div className="flex-1 bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
@@ -468,25 +468,27 @@ export default function ReviewCenterPage() {
                                     </p>
                                   )}
                                 </div>
-                                <button
-                                  onClick={() => handleStartScoring(sub)}
-                                  className="flex items-center gap-2 px-3 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                                >
-                                  <Edit3 className="w-4 h-4" />
-                                  修改
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteReview(sub.id)}
-                                  className="flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  删除
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleStartScoring(sub)}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors text-sm"
+                                  >
+                                    <Edit3 className="w-4 h-4" />
+                                    修改
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteReview(sub.id)}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors text-sm"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    删除
+                                  </button>
+                                </div>
                               </>
                             ) : (
                               <button
                                 onClick={() => handleStartScoring(sub)}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
                               >
                                 <Star className="w-4 h-4" />
                                 开始评分

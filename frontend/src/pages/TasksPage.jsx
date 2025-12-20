@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   CheckCircle2,
   Gift,
@@ -15,12 +15,14 @@ import {
   Trophy,
   Star,
   ChevronLeft,
+  ChevronRight,
   Clock,
   Medal,
   ArrowRightLeft,
 } from 'lucide-react'
 import { useToast } from '../components/Toast'
 import { taskApi, achievementApi } from '../services'
+import { getTaskGuidePath, canNavigateToGuide } from '../utils/taskGuide'
 
 // 任务类型图标映射
 const TASK_ICONS = {
@@ -51,7 +53,7 @@ const TASK_BG_COLORS = {
 }
 
 // 任务项组件
-function TaskItem({ item, onClaim, claiming }) {
+function TaskItem({ item, onClaim, claiming, onNavigate }) {
   const { task, progress } = item
   const Icon = TASK_ICONS[task.task_type] || Target
   const bgColor = TASK_BG_COLORS[task.task_type] || 'bg-slate-500'
@@ -63,15 +65,40 @@ function TaskItem({ item, onClaim, claiming }) {
   const isClaimed = progress?.is_claimed || false
   const isChainBonus = task.task_type === 'CHAIN_BONUS'
 
+  // 使用共享函数判断是否可跳转
+  const canNavigate = canNavigateToGuide({
+    taskType: task.task_type,
+    isCompleted,
+    isClaimed,
+  })
+  const guidePath = getTaskGuidePath(task.task_type)
+
+  const handleClick = () => {
+    if (canNavigate && onNavigate && guidePath) {
+      onNavigate(guidePath, task.name || task.task_type)
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (canNavigate && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault()
+      handleClick()
+    }
+  }
+
   return (
     <div
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role={canNavigate ? 'button' : undefined}
+      tabIndex={canNavigate ? 0 : undefined}
       className={`flex items-center gap-4 p-4 rounded-xl transition-all ${
         isClaimed
           ? 'bg-slate-100 dark:bg-slate-800/50 opacity-60'
           : isCompleted
           ? 'bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 ring-2 ring-yellow-300 dark:ring-yellow-700'
           : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700'
-      }`}
+      } ${canNavigate ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500' : ''}`}
     >
       {/* 图标 */}
       <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${bgColor}`}>
@@ -118,7 +145,10 @@ function TaskItem({ item, onClaim, claiming }) {
           </div>
         ) : isCompleted ? (
           <button
-            onClick={() => onClaim(task.id)}
+            onClick={(e) => {
+              e.stopPropagation()
+              onClaim(task.id)
+            }}
             disabled={claiming}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white rounded-lg transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
           >
@@ -131,6 +161,11 @@ function TaskItem({ item, onClaim, claiming }) {
               </>
             )}
           </button>
+        ) : canNavigate ? (
+          <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+            <span className="text-sm font-medium">去完成</span>
+            <ChevronRight className="w-5 h-5" />
+          </div>
         ) : (
           <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
             <Coins className="w-5 h-5 text-yellow-500" />
@@ -295,6 +330,7 @@ function BadgeExchangeItem({ badge, onExchange, exchanging }) {
 // 主页面
 export default function TasksPage() {
   const toast = useToast()
+  const navigate = useNavigate()
   const [dailyData, setDailyData] = useState(null)
   const [weeklyData, setWeeklyData] = useState(null)
   const [achievements, setAchievements] = useState([])
@@ -385,6 +421,12 @@ export default function TasksPage() {
       setExchangingBadge(null)
     }
   }
+
+  // 跳转到任务引导页
+  const handleNavigate = useCallback((path, taskName) => {
+    toast.info(`前往完成「${taskName}」`)
+    navigate(path)
+  }, [navigate, toast])
 
   const dailyStats = dailyData?.stats || { total: 0, completed: 0, claimed: 0 }
   const weeklyStats = weeklyData?.stats || { total: 0, completed: 0, claimed: 0 }
@@ -503,6 +545,7 @@ export default function TasksPage() {
                       item={item}
                       onClaim={handleClaimTask}
                       claiming={claiming === item.task.id}
+                      onNavigate={handleNavigate}
                     />
                   ))}
                 </div>
@@ -526,6 +569,7 @@ export default function TasksPage() {
                       item={item}
                       onClaim={handleClaimTask}
                       claiming={claiming === item.task.id}
+                      onNavigate={handleNavigate}
                     />
                   ))}
                 </div>

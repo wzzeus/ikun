@@ -20,11 +20,12 @@ from app.models.cheer import Cheer
 
 # 成就规则配置
 ACHIEVEMENT_RULES = {
-    # 打气次数类
+    # ========== 打气类成就 ==========
     "cheer_first": {"type": "cheer_count", "target": 1},
     "cheer_10": {"type": "cheer_count", "target": 10},
     "cheer_50": {"type": "cheer_count", "target": 50},
     "cheer_100": {"type": "cheer_count", "target": 100},
+    "cheerleader": {"type": "cheer_count", "target": 100},  # 啦啦队长
 
     # 打气类型类
     "cheer_all_types": {"type": "cheer_types", "target": 5},
@@ -42,6 +43,27 @@ ACHIEVEMENT_RULES = {
     # 探索类
     "explore_all_projects": {"type": "unique_projects", "target": 5},
     "early_supporter": {"type": "early_bird", "target": 1, "days_from_start": 3},
+
+    # ========== 扭蛋类成就 ==========
+    "gacha_beginner": {"type": "gacha_count", "target": 1},      # 扭蛋新手
+    "gacha_addict": {"type": "gacha_count", "target": 10},       # 扭蛋狂人
+    "gacha_master": {"type": "gacha_count", "target": 50},       # 扭蛋大师
+    "lucky_egg": {"type": "gacha_rare", "target": 1},            # 幸运蛋（获得稀有奖品）
+    "golden_touch": {"type": "gacha_rare", "target": 5},         # 点金手（获得5次稀有）
+
+    # ========== 彩蛋类成就（手动颁发，但保留规则以便统一管理）==========
+    "easter_hunter": {"type": "easter_egg", "target": 1},        # 彩蛋猎人
+    "secret_finder": {"type": "easter_egg", "target": 1},        # 秘密发现者
+    "treasure_hunter": {"type": "easter_egg", "target": 1},      # 寻宝达人
+    "lucky_star": {"type": "easter_egg", "target": 1},           # 幸运之星
+    "ikun_pioneer": {"type": "easter_egg", "target": 1},         # iKun先锋
+
+    # ========== 活动类成就 ==========
+    "daily_warrior": {"type": "daily_task_streak", "target": 7}, # 每日战士（连续7天完成任务）
+    "weekly_champion": {"type": "weekly_task_complete", "target": 4},  # 周冠军（完成4周任务）
+
+    # ========== 竞猜类成就 ==========
+    "prediction_king": {"type": "prediction_accuracy", "target": 80},  # 预言家（准确率>80%）
 }
 
 
@@ -226,6 +248,37 @@ async def check_and_unlock_achievements(
                 if date.today() <= deadline:
                     progress = 1
                     should_unlock = True
+
+        # ========== 扭蛋类成就 ==========
+        elif rule_type == "gacha_count":
+            progress = stats.total_gacha_count
+            should_unlock = progress >= target
+
+        elif rule_type == "gacha_rare":
+            progress = stats.gacha_rare_count
+            should_unlock = progress >= target
+
+        # ========== 任务类成就 ==========
+        elif rule_type == "daily_task_streak":
+            progress = stats.max_daily_task_streak
+            should_unlock = progress >= target
+
+        elif rule_type == "weekly_task_complete":
+            progress = stats.weekly_tasks_completed
+            should_unlock = progress >= target
+
+        # ========== 竞猜类成就 ==========
+        elif rule_type == "prediction_accuracy":
+            # 竞猜准确率需要至少10次竞猜
+            if stats.prediction_total >= 10:
+                accuracy = (stats.prediction_correct / stats.prediction_total) * 100
+                progress = int(accuracy)
+                should_unlock = progress >= target
+
+        # ========== 彩蛋类成就（手动颁发，这里不自动检测）==========
+        elif rule_type == "easter_egg":
+            # 彩蛋成就通过特定 API 手动颁发，这里跳过
+            continue
 
         # 更新进度
         user_ach.progress_value = progress
@@ -413,3 +466,82 @@ async def remove_badge_showcase(db: AsyncSession, user_id: int, slot: int) -> bo
         return True
 
     return False
+
+
+# ========== 扭蛋成就触发 ==========
+
+async def update_user_stats_on_gacha(
+    db: AsyncSession,
+    user_id: int,
+    is_rare: bool = False,
+) -> UserStats:
+    """扭蛋后更新用户统计"""
+    stats = await get_or_create_user_stats(db, user_id)
+
+    # 更新扭蛋总数
+    stats.total_gacha_count += 1
+
+    # 如果是稀有奖品
+    if is_rare:
+        stats.gacha_rare_count += 1
+
+    await db.flush()
+    return stats
+
+
+# ========== 竞猜成就触发 ==========
+
+async def update_user_stats_on_prediction(
+    db: AsyncSession,
+    user_id: int,
+    is_correct: bool,
+) -> UserStats:
+    """竞猜结算后更新用户统计"""
+    stats = await get_or_create_user_stats(db, user_id)
+
+    # 更新竞猜统计
+    stats.prediction_total += 1
+    if is_correct:
+        stats.prediction_correct += 1
+
+    await db.flush()
+    return stats
+
+
+# ========== 任务成就触发 ==========
+
+async def update_user_stats_on_task_complete(
+    db: AsyncSession,
+    user_id: int,
+    is_daily: bool = True,
+    is_weekly: bool = False,
+) -> UserStats:
+    """任务完成后更新用户统计"""
+    stats = await get_or_create_user_stats(db, user_id)
+    today = date.today()
+
+    if is_daily:
+        # 更新连续完成天数
+        if stats.last_task_date:
+            days_diff = (today - stats.last_task_date).days
+            if days_diff == 1:
+                stats.daily_task_streak += 1
+            elif days_diff > 1:
+                stats.daily_task_streak = 1
+            # days_diff == 0 表示今天已完成，不更新
+        else:
+            stats.daily_task_streak = 1
+
+        # 更新最大连续天数
+        if stats.daily_task_streak > stats.max_daily_task_streak:
+            stats.max_daily_task_streak = stats.daily_task_streak
+
+        # 更新最后完成日期
+        if stats.last_task_date != today:
+            stats.last_task_date = today
+
+    if is_weekly:
+        stats.weekly_tasks_completed += 1
+
+    await db.flush()
+    return stats

@@ -37,6 +37,8 @@ import {
   CircleDot,
   Cherry,
   Crown,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../stores/authStore'
@@ -1019,8 +1021,8 @@ function LotteryConfigPanel() {
   const loadConfigs = async () => {
     try {
       const data = await adminApi2.getLotteryConfigs()
-      // API 返回 {items: [...]} 格式
-      setConfigs(data.items || data || [])
+      // API 返回 {configs: [...]} 格式
+      setConfigs(data.configs || data.items || [])
     } catch (error) {
       console.error('加载抽奖配置失败:', error)
       toast.error('加载抽奖配置失败')
@@ -1170,13 +1172,28 @@ function LotteryConfigPanel() {
   )
 }
 
-// 兑换商城管理面板
+// 积分商城管理面板
 function ExchangeManagePanel() {
   const toast = useToast()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingItem, setEditingItem] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    description: '',
+    item_type: 'LOTTERY_TICKET',
+    item_value: '',
+    cost_points: 100,
+    stock: null,
+    daily_limit: null,
+    total_limit: null,
+    is_hot: false,
+    is_active: true,
+    sort_order: 0,
+  })
+  const [stockModal, setStockModal] = useState({ show: false, item: null, quantity: 10 })
 
   useEffect(() => {
     loadItems()
@@ -1216,6 +1233,66 @@ function ExchangeManagePanel() {
     }
   }
 
+  const handleCreate = async () => {
+    try {
+      if (!createForm.name.trim()) {
+        toast.error('请输入商品名称')
+        return
+      }
+      await adminApi2.createExchangeItem(createForm)
+      toast.success('商品创建成功')
+      setShowCreateModal(false)
+      setCreateForm({
+        name: '',
+        description: '',
+        item_type: 'LOTTERY_TICKET',
+        item_value: '',
+        cost_points: 100,
+        stock: null,
+        daily_limit: null,
+        total_limit: null,
+        is_hot: false,
+        is_active: true,
+        sort_order: 0,
+      })
+      loadItems()
+    } catch (error) {
+      toast.error('创建失败：' + (error.response?.data?.detail || error.message))
+    }
+  }
+
+  const handleDelete = async (item) => {
+    if (!confirm(`确定要删除商品「${item.name}」吗？此操作不可恢复。`)) return
+    try {
+      await adminApi2.deleteExchangeItem(item.id)
+      toast.success('商品已删除')
+      loadItems()
+    } catch (error) {
+      toast.error('删除失败：' + (error.response?.data?.detail || error.message))
+    }
+  }
+
+  const handleToggleStatus = async (item) => {
+    try {
+      const result = await adminApi2.toggleExchangeItemStatus(item.id)
+      toast.success(result.message)
+      loadItems()
+    } catch (error) {
+      toast.error('操作失败：' + (error.response?.data?.detail || error.message))
+    }
+  }
+
+  const handleAddStock = async () => {
+    try {
+      const result = await adminApi2.addExchangeItemStock(stockModal.item.id, stockModal.quantity)
+      toast.success(result.message)
+      setStockModal({ show: false, item: null, quantity: 10 })
+      loadItems()
+    } catch (error) {
+      toast.error('补货失败：' + (error.response?.data?.detail || error.message))
+    }
+  }
+
   const ITEM_TYPE_MAP = {
     LOTTERY_TICKET: { name: '抽奖券', icon: Gift, color: 'pink' },
     SCRATCH_TICKET: { name: '刮刮乐券', icon: Ticket, color: 'orange' },
@@ -1235,6 +1312,13 @@ function ExchangeManagePanel() {
           <ShoppingBag className="w-5 h-5 text-blue-500" />
           兑换商品管理
         </h3>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          添加商品
+        </button>
       </div>
 
       <div className="grid gap-4">
@@ -1258,34 +1342,73 @@ function ExchangeManagePanel() {
                       }`}>
                         {item.is_active ? '上架' : '下架'}
                       </span>
+                      {item.is_hot && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                          热门
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">{typeInfo.name}</p>
                   </div>
                 </div>
 
-                {isEditing ? (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleSave(item.id)}
-                      className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
-                    >
-                      <Check className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => setEditingItem(null)}
-                      className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="p-2 text-slate-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {isEditing ? (
+                    <>
+                      <button
+                        onClick={() => handleSave(item.id)}
+                        className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
+                        title="保存"
+                      >
+                        <Check className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => setEditingItem(null)}
+                        className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                        title="取消"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="p-2 text-slate-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg"
+                        title="编辑"
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      {item.stock !== null && (
+                        <button
+                          onClick={() => setStockModal({ show: true, item, quantity: 10 })}
+                          className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                          title="补货"
+                        >
+                          <Package className="w-5 h-5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleToggleStatus(item)}
+                        className={`p-2 rounded-lg ${
+                          item.is_active
+                            ? 'text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20'
+                            : 'text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'
+                        }`}
+                        title={item.is_active ? '下架' : '上架'}
+                      >
+                        {item.is_active ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item)}
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                        title="删除"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
@@ -1353,6 +1476,186 @@ function ExchangeManagePanel() {
           )
         })}
       </div>
+
+      {/* 创建商品弹窗 */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-blue-500" />
+              添加商品
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">商品名称 *</label>
+                <input
+                  type="text"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  placeholder="如：幸运抽奖券"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">商品描述</label>
+                <input
+                  type="text"
+                  value={createForm.description}
+                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  placeholder="商品描述（可选）"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">商品类型 *</label>
+                <select
+                  value={createForm.item_type}
+                  onChange={(e) => setCreateForm({ ...createForm, item_type: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                >
+                  <option value="LOTTERY_TICKET">抽奖券</option>
+                  <option value="SCRATCH_TICKET">刮刮乐券</option>
+                  <option value="GACHA_TICKET">扭蛋券</option>
+                  <option value="API_KEY">API Key</option>
+                  <option value="ITEM">道具</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">价格（积分）*</label>
+                  <input
+                    type="number"
+                    value={createForm.cost_points}
+                    onChange={(e) => setCreateForm({ ...createForm, cost_points: parseInt(e.target.value) || 0 })}
+                    min="0"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">库存（空=无限）</label>
+                  <input
+                    type="number"
+                    value={createForm.stock || ''}
+                    onChange={(e) => setCreateForm({ ...createForm, stock: e.target.value ? parseInt(e.target.value) : null })}
+                    placeholder="无限"
+                    min="0"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">每日限购</label>
+                  <input
+                    type="number"
+                    value={createForm.daily_limit || ''}
+                    onChange={(e) => setCreateForm({ ...createForm, daily_limit: e.target.value ? parseInt(e.target.value) : null })}
+                    placeholder="无限"
+                    min="0"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">总限购</label>
+                  <input
+                    type="number"
+                    value={createForm.total_limit || ''}
+                    onChange={(e) => setCreateForm({ ...createForm, total_limit: e.target.value ? parseInt(e.target.value) : null })}
+                    placeholder="无限"
+                    min="0"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createForm.is_hot}
+                    onChange={(e) => setCreateForm({ ...createForm, is_hot: e.target.checked })}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">热门商品</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createForm.is_active}
+                    onChange={(e) => setCreateForm({ ...createForm, is_active: e.target.checked })}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">立即上架</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreate}
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600"
+              >
+                创建商品
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 补货弹窗 */}
+      {stockModal.show && stockModal.item && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              <Package className="w-5 h-5 text-blue-500" />
+              补充库存
+            </h3>
+
+            <p className="text-slate-600 dark:text-slate-400 mb-4">
+              为「{stockModal.item.name}」补充库存
+              <br />
+              <span className="text-sm">当前库存：{stockModal.item.stock}</span>
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">补充数量</label>
+              <input
+                type="number"
+                value={stockModal.quantity}
+                onChange={(e) => setStockModal({ ...stockModal, quantity: parseInt(e.target.value) || 1 })}
+                min="1"
+                className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setStockModal({ show: false, item: null, quantity: 10 })}
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAddStock}
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600"
+              >
+                确认补货
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1361,23 +1664,62 @@ function ExchangeManagePanel() {
 function UserPointsPanel() {
   const toast = useToast()
   const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [searchKeyword, setSearchKeyword] = useState('')
   const [adjustingUser, setAdjustingUser] = useState(null)
   const [adjustForm, setAdjustForm] = useState({ amount: '', reason: '' })
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(20)
+  const [total, setTotal] = useState(0)
+  const [selectedUsers, setSelectedUsers] = useState([])
+  const [batchForm, setBatchForm] = useState({ amount: '', reason: '' })
+  const [showBatchModal, setShowBatchModal] = useState(false)
+  const [batchLoading, setBatchLoading] = useState(false)
+  // 排序相关状态
+  const [sortBy, setSortBy] = useState('') // balance, total_earned, total_spent, created_at
+  const [sortOrder, setSortOrder] = useState('desc') // asc, desc
+  // 日志相关状态
+  const [showLogModal, setShowLogModal] = useState(false)
+  const [logUser, setLogUser] = useState(null)
+  const [logData, setLogData] = useState(null)
+  const [logLoading, setLogLoading] = useState(false)
+  const [logPage, setLogPage] = useState(1)
+  const logPageSize = 15
 
-  const handleSearch = async () => {
-    if (!searchKeyword.trim()) return
+  // 初始加载
+  useEffect(() => {
+    loadUsers()
+  }, [page, sortBy, sortOrder])
+
+  const loadUsers = async (search = searchKeyword) => {
     setLoading(true)
     try {
-      const data = await adminApi2.getUsers({ search: searchKeyword, limit: 20 })
+      const data = await adminApi2.getUsers({
+        search: search || undefined,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
+        limit: pageSize,
+        offset: (page - 1) * pageSize
+      })
       setUsers(data.items || [])
+      setTotal(data.total || data.items?.length || 0)
     } catch (error) {
-      console.error('搜索用户失败:', error)
-      toast.error('搜索失败：' + (error.response?.data?.detail || error.message))
+      console.error('加载用户失败:', error)
+      toast.error('加载失败：' + (error.response?.data?.detail || error.message))
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSearch = () => {
+    setPage(1)
+    loadUsers(searchKeyword)
+  }
+
+  const handleClearSearch = () => {
+    setSearchKeyword('')
+    setPage(1)
+    loadUsers('')
   }
 
   const handleAdjust = async (userId) => {
@@ -1393,97 +1735,517 @@ function UserPointsPanel() {
       toast.success('积分调整成功')
       setAdjustingUser(null)
       setAdjustForm({ amount: '', reason: '' })
-      handleSearch()
+      loadUsers()
     } catch (error) {
       toast.error('调整失败：' + (error.response?.data?.detail || error.message))
     }
   }
 
+  // 批量调整积分
+  const handleBatchAdjust = async () => {
+    if (!batchForm.amount || !batchForm.reason) {
+      toast.error('请填写完整信息')
+      return
+    }
+    if (selectedUsers.length === 0) {
+      toast.error('请先选择用户')
+      return
+    }
+    setBatchLoading(true)
+    try {
+      let successCount = 0
+      let failCount = 0
+      for (const userId of selectedUsers) {
+        try {
+          await adminApi2.adjustPoints(userId, {
+            amount: parseInt(batchForm.amount),
+            reason: batchForm.reason,
+          })
+          successCount++
+        } catch {
+          failCount++
+        }
+      }
+      toast.success(`批量调整完成: ${successCount} 成功, ${failCount} 失败`)
+      setShowBatchModal(false)
+      setBatchForm({ amount: '', reason: '' })
+      setSelectedUsers([])
+      loadUsers()
+    } catch (error) {
+      toast.error('批量调整失败：' + (error.response?.data?.detail || error.message))
+    } finally {
+      setBatchLoading(false)
+    }
+  }
+
+  // 选择/取消选择用户
+  const toggleSelectUser = (userId) => {
+    setSelectedUsers(prev =>
+      prev.includes(userId)
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    )
+  }
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedUsers.length === users.length) {
+      setSelectedUsers([])
+    } else {
+      setSelectedUsers(users.map(u => u.id))
+    }
+  }
+
+  // 查看用户积分日志
+  const handleViewLog = async (user) => {
+    setLogUser(user)
+    setLogPage(1)
+    setShowLogModal(true)
+    await loadUserLogs(user.id, 1)
+  }
+
+  const loadUserLogs = async (userId, pageNum = logPage) => {
+    setLogLoading(true)
+    try {
+      const data = await adminApi2.getUserPointsHistory(userId, {
+        limit: logPageSize,
+        offset: (pageNum - 1) * logPageSize
+      })
+      setLogData(data)
+    } catch (error) {
+      console.error('加载积分日志失败:', error)
+      toast.error('加载日志失败：' + (error.response?.data?.detail || error.message))
+    } finally {
+      setLogLoading(false)
+    }
+  }
+
+  const handleLogPageChange = (newPage) => {
+    setLogPage(newPage)
+    if (logUser) {
+      loadUserLogs(logUser.id, newPage)
+    }
+  }
+
+  // 积分来源中文映射
+  const reasonMap = {
+    'DAILY_SIGNIN': '每日签到',
+    'SIGNIN_MILESTONE': '签到里程碑',
+    'LOTTERY_WIN': '抽奖获得',
+    'LOTTERY_COST': '抽奖消耗',
+    'SCRATCH_WIN': '刮刮乐获得',
+    'SCRATCH_COST': '刮刮乐消耗',
+    'GACHA_WIN': '扭蛋获得',
+    'GACHA_COST': '扭蛋消耗',
+    'SLOT_WIN': '老虎机获得',
+    'SLOT_COST': '老虎机消耗',
+    'EXCHANGE_COST': '兑换消耗',
+    'PREDICTION_BET': '竞猜下注',
+    'PREDICTION_WIN': '竞猜获胜',
+    'PREDICTION_REFUND': '竞猜退款',
+    'ADMIN_GRANT': '管理员发放',
+    'ADMIN_DEDUCT': '管理员扣除',
+    'ACHIEVEMENT_REWARD': '成就奖励',
+    'BADGE_EXCHANGE': '徽章兑换',
+    'CHEER': '打气获得',
+    'EASTER_EGG': '彩蛋兑换',
+    'TASK_REWARD': '任务奖励',
+    'SYSTEM': '系统',
+  }
+
+  const totalPages = Math.ceil(total / pageSize) || 1
+  const logTotalPages = logData ? Math.ceil(logData.total / logPageSize) || 1 : 1
+
   return (
     <div className="space-y-6">
-      {/* 搜索 */}
+      {/* 搜索和操作栏 */}
       <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
         <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
           <Users className="w-5 h-5 text-blue-500" />
           用户积分调整
         </h3>
-        <div className="flex gap-4">
-          <input
-            type="text"
-            placeholder="搜索用户名或ID..."
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            className="flex-1 px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-          />
+        <div className="flex flex-wrap gap-4">
+          <div className="flex-1 min-w-[200px] flex gap-2">
+            <input
+              type="text"
+              placeholder="搜索用户名或邮箱..."
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              className="flex-1 px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+            />
+            <button
+              onClick={handleSearch}
+              disabled={loading}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+            >
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
+              搜索
+            </button>
+            {searchKeyword && (
+              <button
+                onClick={handleClearSearch}
+                className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+              >
+                清除
+              </button>
+            )}
+          </div>
+          {/* 排序选择 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
+              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm"
+            >
+              <option value="">默认排序</option>
+              <option value="balance">剩余积分</option>
+              <option value="total_earned">总积分</option>
+              <option value="total_spent">消耗积分</option>
+              <option value="created_at">注册时间</option>
+            </select>
+            {sortBy && (
+              <button
+                onClick={() => { setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc'); setPage(1) }}
+                className={`px-3 py-2 rounded-xl border transition-all flex items-center gap-1 text-sm ${
+                  sortOrder === 'desc'
+                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-400'
+                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400'
+                }`}
+                title={sortOrder === 'desc' ? '点击切换为升序' : '点击切换为降序'}
+              >
+                {sortOrder === 'desc' ? (
+                  <>
+                    <TrendingUp className="w-4 h-4 rotate-180" />
+                    高→低
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="w-4 h-4" />
+                    低→高
+                  </>
+                )}
+              </button>
+            )}
+          </div>
           <button
-            onClick={handleSearch}
+            onClick={() => loadUsers()}
             disabled={loading}
-            className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+            className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all flex items-center gap-2"
           >
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
-            搜索
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            刷新
           </button>
+          {selectedUsers.length > 0 && (
+            <button
+              onClick={() => setShowBatchModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+            >
+              <Coins className="w-4 h-4" />
+              批量调整 ({selectedUsers.length})
+            </button>
+          )}
         </div>
       </div>
 
       {/* 用户列表 */}
-      {users.length > 0 && (
-        <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
-          <div className="space-y-3">
-            {users.map((user) => (
-              <div key={user.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <div className="flex items-center gap-4">
+      <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-8 h-8 animate-spin text-purple-500" />
+          </div>
+        ) : users.length === 0 ? (
+          <div className="text-center py-12 text-slate-500">
+            暂无用户数据
+          </div>
+        ) : (
+          <>
+            {/* 表头 */}
+            <div className="flex items-center gap-4 px-4 py-2 mb-2 text-sm font-medium text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+              <input
+                type="checkbox"
+                checked={selectedUsers.length === users.length && users.length > 0}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+              />
+              <span className="w-12">头像</span>
+              <span className="flex-1">用户信息</span>
+              <span className="w-24 text-right">当前积分</span>
+              <span className="w-40 text-center">操作</span>
+            </div>
+
+            {/* 用户列表 */}
+            <div className="space-y-2">
+              {users.map((user) => (
+                <div key={user.id} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.includes(user.id)}
+                    onChange={() => toggleSelectUser(user.id)}
+                    className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                  />
                   <img
                     src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
                     alt={user.username}
-                    className="w-12 h-12 rounded-full"
+                    className="w-10 h-10 rounded-full"
                   />
-                  <div>
-                    <p className="font-medium text-slate-800 dark:text-white">{user.display_name || user.username}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">@{user.username} | 积分: {user.balance ?? user.points_balance ?? 0}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-800 dark:text-white truncate">
+                      {user.display_name || user.username}
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 truncate">
+                      @{user.username} · {user.role || 'user'}
+                    </p>
+                  </div>
+                  <div className="w-24 text-right">
+                    <span className="font-semibold text-purple-600 dark:text-purple-400">
+                      {(user.balance ?? user.points_balance ?? 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="w-40 flex items-center gap-1">
+                    {adjustingUser === user.id ? (
+                      <>
+                        <input
+                          type="number"
+                          placeholder="+/-"
+                          value={adjustForm.amount}
+                          onChange={(e) => setAdjustForm({ ...adjustForm, amount: e.target.value })}
+                          className="w-16 px-2 py-1 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
+                        />
+                        <button
+                          onClick={() => handleAdjust(user.id)}
+                          className="p-1 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                          title="确认"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setAdjustingUser(null); setAdjustForm({ amount: '', reason: '' }) }}
+                          className="p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                          title="取消"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleViewLog(user)}
+                          className="px-2 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                          title="查看积分日志"
+                        >
+                          日志
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAdjustingUser(user.id)
+                            setAdjustForm({ amount: '', reason: '管理员调整' })
+                          }}
+                          className="px-2 py-1.5 text-sm font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                        >
+                          调整
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
+              ))}
+            </div>
 
-                {adjustingUser === user.id ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      placeholder="积分数量(+/-)"
-                      value={adjustForm.amount}
-                      onChange={(e) => setAdjustForm({ ...adjustForm, amount: e.target.value })}
-                      className="w-28 px-3 py-1.5 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
-                    />
-                    <input
-                      type="text"
-                      placeholder="调整原因"
-                      value={adjustForm.reason}
-                      onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })}
-                      className="w-40 px-3 py-1.5 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
-                    />
-                    <button
-                      onClick={() => handleAdjust(user.id)}
-                      className="p-1.5 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
-                    >
-                      <Check className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => { setAdjustingUser(null); setAdjustForm({ amount: '', reason: '' }) }}
-                      className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setAdjustingUser(user.id)}
-                    className="px-4 py-2 text-sm font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                  >
-                    调整积分
-                  </button>
-                )}
+            {/* 分页 */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <span className="text-sm text-slate-500">
+                共 {total} 条记录，第 {page} / {totalPages} 页
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {page}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
-            ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* 批量调整弹窗 */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">
+              批量调整积分
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+              将为 {selectedUsers.length} 位用户调整积分
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  积分数量
+                </label>
+                <input
+                  type="number"
+                  placeholder="正数增加，负数扣除"
+                  value={batchForm.amount}
+                  onChange={(e) => setBatchForm({ ...batchForm, amount: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  调整原因
+                </label>
+                <input
+                  type="text"
+                  placeholder="例如：活动奖励、违规扣除"
+                  value={batchForm.reason}
+                  onChange={(e) => setBatchForm({ ...batchForm, reason: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowBatchModal(false)}
+                className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleBatchAdjust}
+                disabled={batchLoading}
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+              >
+                {batchLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                确认调整
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 积分日志弹窗 */}
+      {showLogModal && logUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-2xl mx-4 shadow-xl max-h-[85vh] flex flex-col">
+            {/* 头部 */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <img
+                  src={logUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${logUser.username}`}
+                  alt={logUser.username}
+                  className="w-10 h-10 rounded-full"
+                />
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
+                    {logUser.display_name || logUser.username} 的积分日志
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    当前余额: <span className="font-semibold text-purple-600">{logData?.current_balance?.toLocaleString() || 0}</span>
+                    {' · '}总获得: <span className="text-green-600">{logData?.total_earned?.toLocaleString() || 0}</span>
+                    {' · '}总消耗: <span className="text-red-600">{logData?.total_spent?.toLocaleString() || 0}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowLogModal(false); setLogData(null); setLogUser(null) }}
+                className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 日志列表 */}
+            <div className="flex-1 overflow-auto">
+              {logLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="w-8 h-8 animate-spin text-purple-500" />
+                </div>
+              ) : !logData?.items?.length ? (
+                <div className="text-center py-12 text-slate-500">
+                  暂无积分记录
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {logData.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            item.amount > 0
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          }`}>
+                            {reasonMap[item.reason] || item.reason}
+                          </span>
+                          {item.description && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[200px]">
+                              {item.description}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '-'}
+                          {item.balance_after !== undefined && (
+                            <span className="ml-2">余额: {item.balance_after.toLocaleString()}</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className={`text-lg font-semibold ${
+                        item.amount > 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {item.amount > 0 ? '+' : ''}{item.amount.toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 分页 */}
+            {logData && logData.total > logPageSize && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <span className="text-sm text-slate-500">
+                  共 {logData.total} 条记录
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleLogPageChange(logPage - 1)}
+                    disabled={logPage <= 1 || logLoading}
+                    className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {logPage} / {logTotalPages}
+                  </span>
+                  <button
+                    onClick={() => handleLogPageChange(logPage + 1)}
+                    disabled={logPage >= logTotalPages || logLoading}
+                    className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1505,9 +2267,9 @@ function ScratchManagePanel() {
     daily_limit: 10,
   })
   const [newPrize, setNewPrize] = useState({
-    prize_name: '',
-    prize_type: 'POINTS',
-    prize_value: '',
+    name: '',
+    type: 'POINTS',
+    value: '',
     weight: 100,
     stock: null,
     is_rare: false,
@@ -1521,7 +2283,8 @@ function ScratchManagePanel() {
     try {
       const data = await adminApi2.getLotteryConfigs()
       // 筛选刮刮乐配置
-      const scratchConfigs = (data.items || data || []).filter(
+      const configList = data.configs || data.items || []
+      const scratchConfigs = configList.filter(
         c => c.name?.includes('刮刮乐') || c.name?.includes('彩票')
       )
       setConfigs(scratchConfigs)
@@ -1560,7 +2323,7 @@ function ScratchManagePanel() {
   }
 
   const handleAddPrize = async (configId) => {
-    if (!newPrize.prize_name) {
+    if (!newPrize.name) {
       toast.error('请填写奖品名称')
       return
     }
@@ -1572,9 +2335,9 @@ function ScratchManagePanel() {
       })
       toast.success('奖品添加成功')
       setNewPrize({
-        prize_name: '',
-        prize_type: 'POINTS',
-        prize_value: '',
+        name: '',
+        type: 'POINTS',
+        value: '',
         weight: 100,
         stock: null,
         is_rare: false,
@@ -1769,13 +2532,13 @@ function ScratchManagePanel() {
                   <input
                     type="text"
                     placeholder="奖品名称 *"
-                    value={newPrize.prize_name}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_name: e.target.value })}
+                    value={newPrize.name}
+                    onChange={(e) => setNewPrize({ ...newPrize, name: e.target.value })}
                     className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
                   />
                   <select
-                    value={newPrize.prize_type}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_type: e.target.value })}
+                    value={newPrize.type}
+                    onChange={(e) => setNewPrize({ ...newPrize, type: e.target.value })}
                     className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
                   >
                     <option value="POINTS">积分</option>
@@ -1786,8 +2549,8 @@ function ScratchManagePanel() {
                   <input
                     type="text"
                     placeholder="奖品值（积分数/道具名）"
-                    value={newPrize.prize_value}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_value: e.target.value })}
+                    value={newPrize.value}
+                    onChange={(e) => setNewPrize({ ...newPrize, value: e.target.value })}
                     className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
                   />
                   <input
@@ -2285,14 +3048,33 @@ function SlotMachineManagePanel() {
   )
 }
 
-// 扭蛋机管理面板 - 显示奖池配置（只读）
+// 扭蛋机管理面板 - 支持增删改查
 function GachaManagePanel() {
-  const [status, setStatus] = useState(null)
+  const toast = useToast()
+  const [configs, setConfigs] = useState([])
+  const [selectedConfig, setSelectedConfig] = useState(null)
   const [prizes, setPrizes] = useState([])
+  const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  // 扭蛋机配置（与后端一致）
-  const GACHA_COST = 50
+  // 编辑状态
+  const [editingConfig, setEditingConfig] = useState(false)
+  const [configForm, setConfigForm] = useState({ name: '', cost_points: 50, daily_limit: null, is_active: true })
+
+  // 奖品编辑
+  const [editingPrize, setEditingPrize] = useState(null)
+  const [showAddPrize, setShowAddPrize] = useState(false)
+  const [prizeForm, setPrizeForm] = useState({
+    prize_type: 'points',
+    prize_name: '',
+    prize_value: { amount: 10 },
+    weight: 10,
+    stock: null,
+    is_rare: false,
+    is_enabled: true,
+    sort_order: 0
+  })
 
   useEffect(() => {
     loadData()
@@ -2301,23 +3083,192 @@ function GachaManagePanel() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [statusRes, prizesRes] = await Promise.all([
-        api.get('/gacha/status'),
-        api.get('/gacha/prizes')
+      const [configRes, statsRes] = await Promise.all([
+        api.get('/gacha/admin/config'),
+        api.get('/gacha/admin/stats').catch(() => null)
       ])
-      setStatus(statusRes)
-      setPrizes(prizesRes.prizes || [])
+      const configList = configRes.configs || []
+      setConfigs(configList)
+      setStats(statsRes)
+
+      if (configList.length > 0 && !selectedConfig) {
+        const activeConfig = configList.find(c => c.is_active) || configList[0]
+        setSelectedConfig(activeConfig)
+        await loadPrizes(activeConfig.id)
+      }
     } catch (error) {
       console.error('加载扭蛋机数据失败:', error)
+      toast.error('加载数据失败')
     } finally {
       setLoading(false)
     }
   }
 
+  const loadPrizes = async (configId) => {
+    try {
+      const res = await api.get(`/gacha/admin/prizes/${configId}`)
+      setPrizes(res.prizes || [])
+    } catch (error) {
+      console.error('加载奖品失败:', error)
+      setPrizes([])
+    }
+  }
+
+  const selectConfig = async (config) => {
+    setSelectedConfig(config)
+    await loadPrizes(config.id)
+  }
+
+  // 更新配置
+  const handleUpdateConfig = async () => {
+    if (!selectedConfig) return
+    setSaving(true)
+    try {
+      await api.put(`/gacha/admin/config/${selectedConfig.id}`, configForm)
+      toast.success('配置已更新')
+      setEditingConfig(false)
+      await loadData()
+    } catch (error) {
+      toast.error('更新失败: ' + (error.message || '未知错误'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 添加奖品
+  const handleAddPrize = async () => {
+    if (!selectedConfig) return
+    if (!prizeForm.prize_name.trim()) {
+      toast.error('请输入奖品名称')
+      return
+    }
+    setSaving(true)
+    try {
+      await api.post(`/gacha/admin/prizes/${selectedConfig.id}`, prizeForm)
+      toast.success('奖品已添加')
+      setShowAddPrize(false)
+      resetPrizeForm()
+      await loadPrizes(selectedConfig.id)
+    } catch (error) {
+      toast.error('添加失败: ' + (error.message || '未知错误'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 更新奖品
+  const handleUpdatePrize = async () => {
+    if (!selectedConfig || !editingPrize) return
+    setSaving(true)
+    try {
+      await api.put(`/gacha/admin/prizes/${selectedConfig.id}/${editingPrize.id}`, {
+        prize_name: prizeForm.prize_name,
+        prize_value: prizeForm.prize_value,
+        weight: prizeForm.weight,
+        stock: prizeForm.stock,
+        is_rare: prizeForm.is_rare,
+        is_enabled: prizeForm.is_enabled,
+        sort_order: prizeForm.sort_order
+      })
+      toast.success('奖品已更新')
+      setEditingPrize(null)
+      resetPrizeForm()
+      await loadPrizes(selectedConfig.id)
+    } catch (error) {
+      toast.error('更新失败: ' + (error.message || '未知错误'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 删除奖品
+  const handleDeletePrize = async (prize) => {
+    if (!selectedConfig) return
+    if (!confirm(`确定删除奖品「${prize.prize_name}」吗？`)) return
+    try {
+      await api.delete(`/gacha/admin/prizes/${selectedConfig.id}/${prize.id}`)
+      toast.success('奖品已删除')
+      await loadPrizes(selectedConfig.id)
+    } catch (error) {
+      toast.error('删除失败: ' + (error.message || '未知错误'))
+    }
+  }
+
+  // 启用/禁用奖品
+  const handleTogglePrize = async (prize) => {
+    if (!selectedConfig) return
+    try {
+      await api.put(`/gacha/admin/prizes/${selectedConfig.id}/${prize.id}`, {
+        is_enabled: !prize.is_enabled
+      })
+      toast.success(prize.is_enabled ? '已禁用' : '已启用')
+      await loadPrizes(selectedConfig.id)
+    } catch (error) {
+      toast.error('操作失败')
+    }
+  }
+
+  const resetPrizeForm = () => {
+    setPrizeForm({
+      prize_type: 'points',
+      prize_name: '',
+      prize_value: { amount: 10 },
+      weight: 10,
+      stock: null,
+      is_rare: false,
+      is_enabled: true,
+      sort_order: 0
+    })
+  }
+
+  const startEditPrize = (prize) => {
+    setEditingPrize(prize)
+    setPrizeForm({
+      prize_type: prize.prize_type,
+      prize_name: prize.prize_name,
+      prize_value: prize.prize_value || { amount: 10 },
+      weight: prize.weight,
+      stock: prize.stock,
+      is_rare: prize.is_rare,
+      is_enabled: prize.is_enabled,
+      sort_order: prize.sort_order || 0
+    })
+  }
+
+  const startEditConfig = () => {
+    if (!selectedConfig) return
+    setConfigForm({
+      name: selectedConfig.name,
+      cost_points: selectedConfig.cost_points,
+      daily_limit: selectedConfig.daily_limit,
+      is_active: selectedConfig.is_active
+    })
+    setEditingConfig(true)
+  }
+
   // 获取奖品图标
   const getPrizeIcon = (type) => {
-    return type === 'points' ? Coins : Package
+    switch (type) {
+      case 'points': return Coins
+      case 'item': return Package
+      case 'badge': return Award
+      case 'api_key': return Key
+      default: return Gift
+    }
   }
+
+  const getPrizeTypeLabel = (type) => {
+    switch (type) {
+      case 'points': return '积分'
+      case 'item': return '道具'
+      case 'badge': return '徽章'
+      case 'api_key': return 'API Key'
+      default: return type
+    }
+  }
+
+  // 计算总权重
+  const totalWeight = prizes.filter(p => p.is_enabled).reduce((sum, p) => sum + (p.weight || 0), 0)
 
   if (loading) {
     return (
@@ -2327,112 +3278,409 @@ function GachaManagePanel() {
     )
   }
 
-  // 计算总权重
-  const totalWeight = status?.total_weight || prizes.reduce((sum, p) => sum + (p.weight || 0), 0)
-
   return (
     <div className="space-y-6">
-      {/* 页面说明 */}
+      {/* 页面说明 + 配置选择 */}
       <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-2xl p-6 border border-purple-200/50 dark:border-purple-500/20">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600">
-            <CircleDot className="w-6 h-6 text-white" />
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600">
+              <CircleDot className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-white">扭蛋机配置管理</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                管理扭蛋机奖池配置，支持增删改查奖品
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-slate-800 dark:text-white">扭蛋机配置</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              扭蛋机奖池配置为固定配置，用户每次扭蛋直接获得积分或道具奖励
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4 mt-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl">
-          <div className="flex items-center gap-2">
-            <Coins className="w-4 h-4 text-yellow-500" />
-            <span className="text-sm text-slate-600 dark:text-slate-300">
-              单次消耗: <span className="font-bold text-purple-600">{GACHA_COST}</span> 积分
-            </span>
-          </div>
-          <div className="text-slate-300 dark:text-slate-600">|</div>
-          <div className="text-sm text-slate-500 dark:text-slate-400">
-            奖励直接发放到账户，无需兑换码
-          </div>
-        </div>
-      </div>
-
-      {/* 奖池配置 */}
-      <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-            <Gift className="w-5 h-5 text-pink-500" />
-            奖池配置
-          </h4>
           <button
             onClick={loadData}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+            className="p-2 hover:bg-white/50 dark:hover:bg-slate-800/50 rounded-lg transition-colors"
           >
-            <RefreshCw className="w-4 h-4 text-slate-500" />
+            <RefreshCw className="w-5 h-5 text-slate-500" />
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700">
-                <th className="text-left py-3 px-4 font-medium text-slate-500 dark:text-slate-400">奖品名称</th>
-                <th className="text-left py-3 px-4 font-medium text-slate-500 dark:text-slate-400">类型</th>
-                <th className="text-center py-3 px-4 font-medium text-slate-500 dark:text-slate-400">稀有度</th>
-                <th className="text-right py-3 px-4 font-medium text-slate-500 dark:text-slate-400">中奖概率</th>
-              </tr>
-            </thead>
-            <tbody>
-              {prizes.map((prize, index) => {
-                const Icon = getPrizeIcon(prize.type)
-                const probability = totalWeight > 0 ? ((prize.weight || 0) / totalWeight * 100).toFixed(1) : 0
-                return (
-                  <tr key={index} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Icon className={`w-4 h-4 ${prize.type === 'points' ? 'text-yellow-500' : 'text-blue-500'}`} />
-                        <span className="font-medium text-slate-700 dark:text-slate-200">{prize.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        prize.type === 'points'
-                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                      }`}>
-                        {prize.type === 'points' ? '积分' : '道具'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {prize.is_rare ? (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                          稀有
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">普通</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className={`font-mono ${prize.is_rare ? 'text-purple-600 font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
-                        {probability}%
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        {/* 配置选择器 */}
+        {configs.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4">
+            {configs.map(config => (
+              <button
+                key={config.id}
+                onClick={() => selectConfig(config)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  selectedConfig?.id === config.id
+                    ? 'bg-purple-500 text-white shadow-lg'
+                    : 'bg-white/60 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                }`}
+              >
+                {config.name}
+                {config.is_active && <span className="ml-1 text-xs opacity-75">(激活)</span>}
+                <span className="ml-1 text-xs opacity-60">({config.prizes_count}个奖品)</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-        <p className="text-xs text-slate-400 mt-4">
-          * 奖池配置在后端代码中定义，如需调整请修改 backend/app/api/v1/endpoints/gacha.py 中的 GACHA_PRIZES 配置
-        </p>
+        {/* 当前配置信息 */}
+        {selectedConfig && !editingConfig && (
+          <div className="flex items-center gap-4 mt-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl">
+            <div className="flex items-center gap-2">
+              <Coins className="w-4 h-4 text-yellow-500" />
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                单次消耗: <span className="font-bold text-purple-600">{selectedConfig.cost_points}</span> 积分
+              </span>
+            </div>
+            <div className="text-slate-300 dark:text-slate-600">|</div>
+            <div className="text-sm text-slate-500 dark:text-slate-400">
+              每日限制: {selectedConfig.daily_limit || '无限制'}
+            </div>
+            <div className="ml-auto">
+              <button
+                onClick={startEditConfig}
+                className="px-3 py-1.5 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center gap-1"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                编辑配置
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 编辑配置表单 */}
+        {editingConfig && (
+          <div className="mt-4 p-4 bg-white dark:bg-slate-800 rounded-xl space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">配置名称</label>
+                <input
+                  type="text"
+                  value={configForm.name}
+                  onChange={e => setConfigForm({ ...configForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">单次消耗积分</label>
+                <input
+                  type="number"
+                  value={configForm.cost_points}
+                  onChange={e => setConfigForm({ ...configForm, cost_points: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">每日限制（留空无限制）</label>
+                <input
+                  type="number"
+                  value={configForm.daily_limit || ''}
+                  onChange={e => setConfigForm({ ...configForm, daily_limit: e.target.value ? parseInt(e.target.value) : null })}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-white"
+                  placeholder="无限制"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  type="checkbox"
+                  id="config-active"
+                  checked={configForm.is_active}
+                  onChange={e => setConfigForm({ ...configForm, is_active: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="config-active" className="text-sm text-slate-700 dark:text-slate-300">激活此配置</label>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditingConfig(false)}
+                className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleUpdateConfig}
+                disabled={saving}
+                className="px-4 py-2 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:opacity-50 flex items-center gap-1"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                保存
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* 奖池配置 */}
+      {selectedConfig && (
+        <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+              <Gift className="w-5 h-5 text-pink-500" />
+              奖池配置 ({prizes.length}个奖品)
+            </h4>
+            <button
+              onClick={() => { setShowAddPrize(true); resetPrizeForm() }}
+              className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" />
+              添加奖品
+            </button>
+          </div>
+
+          {/* 添加奖品表单 */}
+          {showAddPrize && (
+            <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+              <h5 className="font-medium text-green-800 dark:text-green-300 mb-3">添加新奖品</h5>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">奖品类型</label>
+                  <select
+                    value={prizeForm.prize_type}
+                    onChange={e => setPrizeForm({ ...prizeForm, prize_type: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900"
+                  >
+                    <option value="points">积分</option>
+                    <option value="item">道具</option>
+                    <option value="badge">徽章</option>
+                    <option value="api_key">API Key</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">奖品名称</label>
+                  <input
+                    type="text"
+                    value={prizeForm.prize_name}
+                    onChange={e => setPrizeForm({ ...prizeForm, prize_name: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900"
+                    placeholder="如：100积分"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                    {prizeForm.prize_type === 'points' ? '积分数量' : '奖励值'}
+                  </label>
+                  <input
+                    type="number"
+                    value={prizeForm.prize_value?.amount || ''}
+                    onChange={e => setPrizeForm({ ...prizeForm, prize_value: { ...prizeForm.prize_value, amount: parseInt(e.target.value) || 0 } })}
+                    className="w-full px-2 py-1.5 text-sm border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">权重</label>
+                  <input
+                    type="number"
+                    value={prizeForm.weight}
+                    onChange={e => setPrizeForm({ ...prizeForm, weight: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-2 py-1.5 text-sm border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">库存（留空无限）</label>
+                  <input
+                    type="number"
+                    value={prizeForm.stock || ''}
+                    onChange={e => setPrizeForm({ ...prizeForm, stock: e.target.value ? parseInt(e.target.value) : null })}
+                    className="w-full px-2 py-1.5 text-sm border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900"
+                    placeholder="无限"
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-5">
+                  <label className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={prizeForm.is_rare}
+                      onChange={e => setPrizeForm({ ...prizeForm, is_rare: e.target.checked })}
+                    />
+                    稀有
+                  </label>
+                  <label className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={prizeForm.is_enabled}
+                      onChange={e => setPrizeForm({ ...prizeForm, is_enabled: e.target.checked })}
+                    />
+                    启用
+                  </label>
+                </div>
+                <div className="col-span-2 flex justify-end gap-2 pt-5">
+                  <button
+                    onClick={() => setShowAddPrize(false)}
+                    className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleAddPrize}
+                    disabled={saving}
+                    className="px-3 py-1.5 text-sm bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                    添加
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 奖品列表 */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="text-left py-3 px-4 font-medium text-slate-500 dark:text-slate-400">奖品名称</th>
+                  <th className="text-left py-3 px-4 font-medium text-slate-500 dark:text-slate-400">类型</th>
+                  <th className="text-center py-3 px-4 font-medium text-slate-500 dark:text-slate-400">权重</th>
+                  <th className="text-center py-3 px-4 font-medium text-slate-500 dark:text-slate-400">概率</th>
+                  <th className="text-center py-3 px-4 font-medium text-slate-500 dark:text-slate-400">稀有</th>
+                  <th className="text-center py-3 px-4 font-medium text-slate-500 dark:text-slate-400">状态</th>
+                  <th className="text-right py-3 px-4 font-medium text-slate-500 dark:text-slate-400">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prizes.map((prize) => {
+                  const Icon = getPrizeIcon(prize.prize_type)
+                  const probability = totalWeight > 0 ? ((prize.weight || 0) / totalWeight * 100).toFixed(2) : 0
+                  const isEditing = editingPrize?.id === prize.id
+
+                  if (isEditing) {
+                    return (
+                      <tr key={prize.id} className="border-b border-slate-100 dark:border-slate-800 bg-blue-50 dark:bg-blue-900/20">
+                        <td className="py-2 px-4">
+                          <input
+                            type="text"
+                            value={prizeForm.prize_name}
+                            onChange={e => setPrizeForm({ ...prizeForm, prize_name: e.target.value })}
+                            className="w-full px-2 py-1 text-sm border rounded bg-white dark:bg-slate-900"
+                          />
+                        </td>
+                        <td className="py-2 px-4 text-slate-500">{getPrizeTypeLabel(prize.prize_type)}</td>
+                        <td className="py-2 px-4">
+                          <input
+                            type="number"
+                            value={prizeForm.weight}
+                            onChange={e => setPrizeForm({ ...prizeForm, weight: parseFloat(e.target.value) || 0 })}
+                            className="w-20 px-2 py-1 text-sm border rounded bg-white dark:bg-slate-900 text-center"
+                          />
+                        </td>
+                        <td className="py-2 px-4 text-center text-slate-500">-</td>
+                        <td className="py-2 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={prizeForm.is_rare}
+                            onChange={e => setPrizeForm({ ...prizeForm, is_rare: e.target.checked })}
+                          />
+                        </td>
+                        <td className="py-2 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={prizeForm.is_enabled}
+                            onChange={e => setPrizeForm({ ...prizeForm, is_enabled: e.target.checked })}
+                          />
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              onClick={() => { setEditingPrize(null); resetPrizeForm() }}
+                              className="p-1 text-slate-500 hover:text-slate-700"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={handleUpdatePrize}
+                              disabled={saving}
+                              className="p-1 text-green-500 hover:text-green-700"
+                            >
+                              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  }
+
+                  return (
+                    <tr key={prize.id} className={`border-b border-slate-100 dark:border-slate-800 ${!prize.is_enabled ? 'opacity-50' : ''}`}>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <Icon className={`w-4 h-4 ${prize.prize_type === 'points' ? 'text-yellow-500' : 'text-blue-500'}`} />
+                          <span className="font-medium text-slate-700 dark:text-slate-200">{prize.prize_name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          prize.prize_type === 'points'
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                            : prize.prize_type === 'badge'
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        }`}>
+                          {getPrizeTypeLabel(prize.prize_type)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono text-slate-600 dark:text-slate-300">
+                        {prize.weight}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`font-mono ${prize.is_rare ? 'text-purple-600 font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
+                          {probability}%
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {prize.is_rare ? (
+                          <Star className="w-4 h-4 text-yellow-500 mx-auto" />
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => handleTogglePrize(prize)}
+                          className={`px-2 py-0.5 rounded text-xs ${
+                            prize.is_enabled
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          }`}
+                        >
+                          {prize.is_enabled ? '启用' : '禁用'}
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => startEditPrize(prize)}
+                            className="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                            title="编辑"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePrize(prize)}
+                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                            title="删除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {prizes.length === 0 && (
+            <div className="text-center py-8 text-slate-400">
+              暂无奖品配置，点击上方"添加奖品"按钮创建
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 统计概览 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200/50 dark:border-slate-700/50">
           <div className="text-sm text-slate-500 dark:text-slate-400">奖品种类</div>
           <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{prizes.length}</div>
@@ -2442,8 +3690,12 @@ function GachaManagePanel() {
           <div className="text-2xl font-bold text-purple-600 mt-1">{prizes.filter(p => p.is_rare).length}</div>
         </div>
         <div className="bg-white dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200/50 dark:border-slate-700/50">
-          <div className="text-sm text-slate-500 dark:text-slate-400">单次消耗</div>
-          <div className="text-2xl font-bold text-yellow-600 mt-1">{GACHA_COST} 积分</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400">总抽奖次数</div>
+          <div className="text-2xl font-bold text-blue-600 mt-1">{stats?.total_draws || 0}</div>
+        </div>
+        <div className="bg-white dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200/50 dark:border-slate-700/50">
+          <div className="text-sm text-slate-500 dark:text-slate-400">今日抽奖</div>
+          <div className="text-2xl font-bold text-green-600 mt-1">{stats?.today_draws || 0}</div>
         </div>
       </div>
     </div>
@@ -2482,7 +3734,7 @@ export default function ActivityManagePage() {
     { id: 'scratch', name: '刮刮乐管理', icon: Ticket },
     { id: 'slot', name: '老虎机管理', icon: Dice1 },
     { id: 'gacha', name: '扭蛋机管理', icon: CircleDot },
-    { id: 'exchange', name: '兑换商城', icon: ShoppingBag },
+    { id: 'exchange', name: '积分商城', icon: ShoppingBag },
     { id: 'users', name: '用户积分', icon: Users },
   ]
 

@@ -314,7 +314,7 @@ function ExchangeHistoryModal({ onClose }) {
 }
 
 // 主组件
-export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate }) {
+export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate, onExchangeSuccess }) {
   const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState([])
@@ -337,7 +337,7 @@ export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate
       setItems(itemsData)
       setUserInfo(infoData)
     } catch (error) {
-      console.error('加载兑换商城失败:', error)
+      console.error('加载积分商城失败:', error)
       toast.error('加载失败，请重试')
     } finally {
       setLoading(false)
@@ -358,10 +358,12 @@ export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate
       setExchangeResult(result)
       setUserInfo((prev) => ({ ...prev, balance: result.balance }))
       onBalanceUpdate?.(result.balance)
-      trackExchange(item.id, item.name, item.price)
+      trackExchange(item.id, item.name, item.cost_points)
       // 重新加载商品列表（更新库存）
       const itemsData = await exchangeApi.getItems()
       setItems(itemsData)
+      // 通知父组件刷新券相关状态（让扭蛋机、刮刮乐等组件更新）
+      onExchangeSuccess?.(item.item_type)
     } catch (error) {
       toast.error(error.response?.data?.detail || '兑换失败')
     } finally {

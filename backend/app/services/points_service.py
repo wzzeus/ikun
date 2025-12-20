@@ -248,17 +248,41 @@ class PointsService:
         db: AsyncSession,
         user_id: int,
         limit: int = 20,
-        offset: int = 0
+        offset: int = 0,
+        filter_type: str = None
     ) -> List[PointsLedger]:
         """获取积分变动历史"""
+        query = select(PointsLedger).where(PointsLedger.user_id == user_id)
+
+        # 按收入/支出筛选
+        if filter_type == "income":
+            query = query.where(PointsLedger.amount > 0)
+        elif filter_type == "expense":
+            query = query.where(PointsLedger.amount < 0)
+
         result = await db.execute(
-            select(PointsLedger)
-            .where(PointsLedger.user_id == user_id)
-            .order_by(PointsLedger.created_at.desc())
+            query.order_by(PointsLedger.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
         return result.scalars().all()
+
+    @staticmethod
+    async def get_points_history_count(
+        db: AsyncSession,
+        user_id: int,
+        filter_type: str = None
+    ) -> int:
+        """获取积分变动历史总数"""
+        query = select(func.count(PointsLedger.id)).where(PointsLedger.user_id == user_id)
+
+        if filter_type == "income":
+            query = query.where(PointsLedger.amount > 0)
+        elif filter_type == "expense":
+            query = query.where(PointsLedger.amount < 0)
+
+        result = await db.execute(query)
+        return result.scalar() or 0
 
 
 class SigninService:

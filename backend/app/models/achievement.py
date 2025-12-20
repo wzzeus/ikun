@@ -112,12 +112,29 @@ class UserStats(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
+    # 打气相关
     total_cheers_given: Mapped[int] = mapped_column(Integer, default=0)
     total_cheers_with_message: Mapped[int] = mapped_column(Integer, default=0)
     cheer_types_used: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     consecutive_days: Mapped[int] = mapped_column(Integer, default=0)
     max_consecutive_days: Mapped[int] = mapped_column(Integer, default=0)
     last_cheer_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # 扭蛋相关
+    total_gacha_count: Mapped[int] = mapped_column(Integer, default=0)
+    gacha_rare_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # 竞猜相关
+    prediction_total: Mapped[int] = mapped_column(Integer, default=0)
+    prediction_correct: Mapped[int] = mapped_column(Integer, default=0)
+
+    # 任务相关
+    daily_task_streak: Mapped[int] = mapped_column(Integer, default=0)
+    max_daily_task_streak: Mapped[int] = mapped_column(Integer, default=0)
+    weekly_tasks_completed: Mapped[int] = mapped_column(Integer, default=0)
+    last_task_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # 通用统计
     total_points: Mapped[int] = mapped_column(Integer, default=0)
     achievements_unlocked: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(

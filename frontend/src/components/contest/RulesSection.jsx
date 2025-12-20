@@ -57,10 +57,11 @@ export default function RulesSection() {
             <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-4 flex items-center">
               <Calendar className="mr-2 text-blue-500 dark:text-blue-400" /> 参赛流程
             </h3>
-            <div className="relative border-l border-slate-300 dark:border-slate-700 ml-3 space-y-8 pl-8 py-2">
+            {/* 时间轴 - 确保圆点与竖线对齐 */}
+            <div className="relative border-l border-slate-300 dark:border-slate-700 ml-3 space-y-8 py-2">
               {PROCESS_STEPS.map((step) => (
-                <div key={step.step} className="relative">
-                  <span className="absolute -left-11 top-1 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-full flex items-center justify-center text-xs text-slate-700 dark:text-slate-300">
+                <div key={step.step} className="relative pl-8">
+                  <span className="absolute left-0 -translate-x-1/2 top-1 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-full flex items-center justify-center text-xs text-slate-700 dark:text-slate-300">
                     {step.step}
                   </span>
                   <h4 className="font-bold text-slate-800 dark:text-white">{step.title}</h4>

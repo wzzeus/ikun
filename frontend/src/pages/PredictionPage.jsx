@@ -147,7 +147,11 @@ export default function PredictionPage() {
     if (!selectedOption || !betAmount || placing) return
 
     const amount = parseInt(betAmount)
-    if (isNaN(amount) || amount < market.min_bet) {
+    if (isNaN(amount) || amount <= 0) {
+      alert('请输入有效的下注金额')
+      return
+    }
+    if (amount < market.min_bet) {
       alert(`最低下注 ${market.min_bet} 积分`)
       return
     }
@@ -341,8 +345,12 @@ export default function PredictionPage() {
               ))}
               <button
                 type="button"
-                onClick={() => setBetAmount(String(balance))}
-                className="px-3 py-1 text-sm bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50"
+                onClick={() => {
+                  if (balance > 0 && window.confirm(`确定要全押 ${balance} 积分吗？此操作有风险！`)) {
+                    setBetAmount(String(balance))
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50"
               >
                 全押
               </button>

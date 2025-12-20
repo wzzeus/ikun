@@ -444,22 +444,23 @@ export default function ContestantDashboard({ className }) {
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full translate-y-1/2 -translate-x-1/2" />
         </div>
 
-        <div className="relative flex items-start justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
+        {/* 头部内容 - 移动端纵向堆叠 */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
               <Zap className="w-7 h-7 text-white" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <Badge className="bg-white/20 text-white border-0 font-bold">
                   <StatusIcon className="w-3 h-3 mr-1" />
                   {statusConfig.label}
                 </Badge>
               </div>
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-white truncate">
                 {registration.title}
               </h2>
-              <p className="text-sm text-white/70 mt-0.5">
+              <p className="text-sm text-white/70 mt-0.5 truncate">
                 {registration.summary?.slice(0, 50)}...
               </p>
             </div>
@@ -468,7 +469,7 @@ export default function ContestantDashboard({ className }) {
           <Button
             variant="secondary"
             size="sm"
-            className="bg-white/20 text-white border-0 hover:bg-white/30"
+            className="w-full sm:w-auto bg-white/20 text-white border-0 hover:bg-white/30"
             onClick={openModal}
           >
             <Edit3 className="w-4 h-4 mr-1.5" />

@@ -296,7 +296,8 @@ async def create_market(
     db: AsyncSession = Depends(get_db)
 ):
     """创建竞猜市场（管理员）"""
-    if current_user.role != "admin":
+    real_role = current_user.original_role or current_user.role
+    if real_role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     market = await PredictionService.create_market(
@@ -346,7 +347,8 @@ async def open_market(
     db: AsyncSession = Depends(get_db)
 ):
     """开启竞猜（管理员）"""
-    if current_user.role != "admin":
+    real_role = current_user.original_role or current_user.role
+    if real_role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:
@@ -363,7 +365,8 @@ async def close_market(
     db: AsyncSession = Depends(get_db)
 ):
     """关闭竞猜（管理员）"""
-    if current_user.role != "admin":
+    real_role = current_user.original_role or current_user.role
+    if real_role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:
@@ -381,7 +384,8 @@ async def settle_market(
     db: AsyncSession = Depends(get_db)
 ):
     """结算竞猜（管理员）"""
-    if current_user.role != "admin":
+    real_role = current_user.original_role or current_user.role
+    if real_role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:
@@ -398,7 +402,8 @@ async def cancel_market(
     db: AsyncSession = Depends(get_db)
 ):
     """取消竞猜（管理员）"""
-    if current_user.role != "admin":
+    real_role = current_user.original_role or current_user.role
+    if real_role != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:

@@ -79,11 +79,13 @@ async def get_points_history(
     request: Request,
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
+    filter_type: Optional[str] = Query(None, description="筛选类型: income/expense/all"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """获取积分变动历史"""
-    history = await PointsService.get_points_history(db, current_user.id, limit, offset)
+    history = await PointsService.get_points_history(db, current_user.id, limit, offset, filter_type)
+    total = await PointsService.get_points_history_count(db, current_user.id, filter_type)
     return {
         "items": [
             {
@@ -95,7 +97,66 @@ async def get_points_history(
                 "created_at": h.created_at.isoformat()
             }
             for h in history
-        ]
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.get("/statistics")
+async def get_points_statistics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取积分统计信息"""
+    from sqlalchemy import text
+
+    # 获取用户积分基础信息
+    user_points = await PointsService.get_or_create_user_points(db, current_user.id)
+
+    # 按类型分组统计收入
+    income_sql = text("""
+        SELECT reason, SUM(amount) as total
+        FROM points_ledger
+        WHERE user_id = :user_id AND amount > 0
+        GROUP BY reason
+        ORDER BY total DESC
+    """)
+    income_result = await db.execute(income_sql, {"user_id": current_user.id})
+    income_by_type = [{"type": r.reason, "total": r.total} for r in income_result.fetchall()]
+
+    # 按类型分组统计支出
+    expense_sql = text("""
+        SELECT reason, SUM(ABS(amount)) as total
+        FROM points_ledger
+        WHERE user_id = :user_id AND amount < 0
+        GROUP BY reason
+        ORDER BY total DESC
+    """)
+    expense_result = await db.execute(expense_sql, {"user_id": current_user.id})
+    expense_by_type = [{"type": r.reason, "total": r.total} for r in expense_result.fetchall()]
+
+    # 最近7天趋势
+    trend_sql = text("""
+        SELECT DATE(created_at) as date,
+               SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+               SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expense
+        FROM points_ledger
+        WHERE user_id = :user_id AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY date ASC
+    """)
+    trend_result = await db.execute(trend_sql, {"user_id": current_user.id})
+    daily_trend = [{"date": str(r.date), "income": r.income or 0, "expense": r.expense or 0} for r in trend_result.fetchall()]
+
+    return {
+        "balance": user_points.balance,
+        "total_earned": user_points.total_earned,
+        "total_spent": user_points.total_spent,
+        "income_by_type": income_by_type,
+        "expense_by_type": expense_by_type,
+        "daily_trend": daily_trend
     }
 
 

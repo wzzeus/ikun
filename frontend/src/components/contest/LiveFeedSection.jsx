@@ -132,8 +132,8 @@ function CommitFeedItem({ item }) {
             <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2 font-mono">
               {item.message || '(no commit message)'}
             </p>
-            {/* 代码变更统计 */}
-            <div className="flex items-center gap-3 mt-1">
+            {/* 代码变更统计 - 修复移动端长 SHA 溢出 */}
+            <div className="flex flex-wrap items-center gap-3 mt-1 min-w-0">
               <span className="inline-flex items-center gap-0.5 text-xs text-green-600 dark:text-green-400">
                 <Plus className="w-3 h-3" />
                 {item.additions || 0}
@@ -142,7 +142,12 @@ function CommitFeedItem({ item }) {
                 <Minus className="w-3 h-3" />
                 {item.deletions || 0}
               </span>
-              <code className="text-xs text-slate-400 font-mono">{item.sha}</code>
+              <code
+                title={item.sha}
+                className="text-xs text-slate-400 font-mono inline-block max-w-[12ch] truncate"
+              >
+                {item.sha}
+              </code>
             </div>
           </div>
         </div>

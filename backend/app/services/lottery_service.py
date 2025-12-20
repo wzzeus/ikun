@@ -65,15 +65,15 @@ class LotteryService:
     @staticmethod
     async def _select_prize(prizes: List[LotteryPrize]) -> LotteryPrize:
         """根据权重随机选择奖品"""
-        # 过滤掉库存为0的奖品
+        # 过滤掉禁用的和库存为0的奖品
         available_prizes = [
             p for p in prizes
-            if p.stock is None or p.stock > 0
+            if getattr(p, 'is_enabled', True) and (p.stock is None or p.stock > 0)
         ]
 
         if not available_prizes:
             # 所有奖品都没库存了，返回谢谢参与
-            empty_prizes = [p for p in prizes if p.prize_type == PrizeType.EMPTY]
+            empty_prizes = [p for p in prizes if p.prize_type == PrizeType.EMPTY and getattr(p, 'is_enabled', True)]
             if empty_prizes:
                 return empty_prizes[0]
             raise ValueError("没有可用的奖品")
@@ -155,7 +155,8 @@ class LotteryService:
         db: AsyncSession,
         user_id: int,
         request_id: str = None,
-        use_ticket: bool = False
+        use_ticket: bool = False,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         执行抽奖
@@ -164,6 +165,7 @@ class LotteryService:
 
         Args:
             use_ticket: 是否优先使用抽奖券（免费）
+            is_admin: 是否是管理员（管理员不受日限限制）
         """
         from sqlalchemy.exc import IntegrityError
         from app.services.exchange_service import ExchangeService
@@ -205,8 +207,8 @@ class LotteryService:
                 # 使用了抽奖券：不受日限约束，不扣积分
                 actual_cost = 0
             else:
-                # 没有券或不使用券：检查日限，扣除积分
-                if config.daily_limit:
+                # 没有券或不使用券：检查日限（管理员不受限制），扣除积分
+                if config.daily_limit and not is_admin:
                     today_count = await LotteryService.get_today_draw_count(db, user_id, config.id)
                     if today_count >= config.daily_limit:
                         raise ValueError(f"今日抽奖次数已达上限（{config.daily_limit}次）")
@@ -271,9 +273,17 @@ class LotteryService:
                     )
                 extra_message = f"获得{points_amount}积分"
 
-            # 扣减奖品库存
+            # 扣减奖品库存（使用原子 UPDATE 防止并发超卖）
             if prize.stock is not None:
-                prize.stock -= 1
+                from sqlalchemy import text
+                deduct_result = await db.execute(
+                    text("UPDATE lottery_prizes SET stock = stock - 1 WHERE id = :prize_id AND stock > 0"),
+                    {"prize_id": prize.id}
+                )
+                if deduct_result.rowcount == 0:
+                    # 库存扣减失败（已被其他请求抢完）
+                    await db.rollback()
+                    raise ValueError("奖品库存不足，请重试")
 
             # 创建抽奖记录
             draw = LotteryDraw(
@@ -640,7 +650,8 @@ class LotteryService:
     async def buy_scratch_card(
         db: AsyncSession,
         user_id: int,
-        use_ticket: bool = False
+        use_ticket: bool = False,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         购买刮刮乐卡片
@@ -648,6 +659,7 @@ class LotteryService:
 
         Args:
             use_ticket: 是否优先使用刮刮乐券（免费）
+            is_admin: 是否是管理员（管理员不受日限限制）
         """
         from app.services.exchange_service import ExchangeService
 
@@ -667,8 +679,8 @@ class LotteryService:
                 # 使用了刮刮乐券：不受日限约束，不扣积分
                 actual_cost = 0
             else:
-                # 没有券或不使用券：检查日限，扣除积分
-                if config.daily_limit:
+                # 没有券或不使用券：检查日限（管理员不受限制），扣除积分
+                if config.daily_limit and not is_admin:
                     today_count = await LotteryService.get_today_scratch_count(db, user_id, config.id)
                     if today_count >= config.daily_limit:
                         raise ValueError(f"今日刮刮乐次数已达上限（{config.daily_limit}次）")
@@ -701,9 +713,17 @@ class LotteryService:
             db.add(card)
             await db.flush()  # 获取 card.id
 
-            # 扣减奖品库存
+            # 扣减奖品库存（使用原子 UPDATE 防止并发超卖）
             if prize.stock is not None:
-                prize.stock -= 1
+                from sqlalchemy import text
+                deduct_result = await db.execute(
+                    text("UPDATE lottery_prizes SET stock = stock - 1 WHERE id = :prize_id AND stock > 0"),
+                    {"prize_id": prize.id}
+                )
+                if deduct_result.rowcount == 0:
+                    # 库存扣减失败（已被其他请求抢完）
+                    await db.rollback()
+                    raise ValueError("奖品库存不足，请重试")
 
             await db.commit()
 
@@ -774,8 +794,8 @@ class LotteryService:
                 extra_message = f"获得{card.prize_name}x1"
 
             elif card.prize_type == PrizeType.API_KEY.value:
-                # 发放API Key，从库存分配（优先使用"抽奖"类型的key）
-                api_key_info = await LotteryService._assign_api_key(db, user_id, "抽奖")
+                # 发放API Key，从库存分配（使用"刮刮乐"类型的key）
+                api_key_info = await LotteryService._assign_api_key(db, user_id, "刮刮乐")
                 if api_key_info:
                     api_key_code = api_key_info["code"]  # 完整兑换码
                     prize_value = api_key_info["code"][:8] + "****"

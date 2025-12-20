@@ -22,7 +22,7 @@ from app.models.registration import Registration, RegistrationStatus
 from app.models.cheer import Cheer, CheerType, CheerStats
 from app.models.user import User
 from app.models.points import UserItem
-from app.api.v1.endpoints.registration import get_current_user, get_optional_user
+from app.api.v1.endpoints.registration import get_current_user, get_optional_user, get_contest_or_404
 from app.services import achievement_service
 
 # 道具分数配置（给选手加的分数）
@@ -178,9 +178,17 @@ async def cheer_registration(
     )
 
     # 检查并解锁成就
-    # TODO: 可以从比赛表获取开始日期用于early_supporter成就
+    # 获取比赛开始日期用于 early_supporter 成就
+    from app.models.contest import Contest
+    contest_start_date = None
+    if registration.contest_id:
+        contest_result = await db.execute(
+            select(Contest.start_date).where(Contest.id == registration.contest_id)
+        )
+        contest_start_date = contest_result.scalar_one_or_none()
+
     newly_unlocked = await achievement_service.check_and_unlock_achievements(
-        db, current_user.id, user_stats
+        db, current_user.id, user_stats, contest_start_date
     )
 
     # 确保 cheer 有 id
@@ -212,6 +220,92 @@ async def cheer_registration(
         cheer_type=payload.cheer_type.value,
         total_cheers=stats.total_count,
     )
+
+
+@router.get(
+    "/contests/{contest_id}/cheers/stats",
+    summary="批量获取比赛选手打气统计",
+    description="返回指定比赛所有已批准选手的打气统计，避免列表页 N+1 请求。优化性能。",
+)
+async def get_contest_cheers_stats(
+    contest_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """
+    批量获取比赛选手打气统计（列表页专用，不返回 recent_messages）
+
+    性能优化：
+    - 使用一次查询获取所有 registration_ids
+    - 使用 IN 查询批量获取所有 CheerStats
+    - 如果用户已登录，使用一次查询获取当天所有打气记录
+    - 避免 N+1 查询问题
+    """
+    # 验证比赛存在
+    await get_contest_or_404(db, contest_id)
+
+    # 批量获取所有已批准的选手 ID
+    reg_result = await db.execute(
+        select(Registration.id).where(
+            Registration.contest_id == contest_id,
+            Registration.status == RegistrationStatus.APPROVED.value,
+        )
+    )
+    registration_ids = reg_result.scalars().all()
+
+    if not registration_ids:
+        return {"data": {}}
+
+    # 批量获取所有打气统计（一次查询）
+    stats_result = await db.execute(
+        select(CheerStats).where(CheerStats.registration_id.in_(registration_ids))
+    )
+    stats_map = {s.registration_id: s for s in stats_result.scalars().all()}
+
+    # 如果用户已登录，批量查询当天是否已打气（一次查询，按类型分组）
+    user_cheered_today_map = {}
+    if current_user:
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        today_end = datetime.combine(date.today(), datetime.max.time())
+
+        cheered_result = await db.execute(
+            select(Cheer.registration_id, Cheer.cheer_type).where(
+                Cheer.user_id == current_user.id,
+                Cheer.registration_id.in_(registration_ids),
+                Cheer.created_at >= today_start,
+                Cheer.created_at <= today_end,
+            )
+        )
+
+        # 按 registration_id 分组，记录每种类型
+        for reg_id, cheer_type in cheered_result.all():
+            if reg_id not in user_cheered_today_map:
+                user_cheered_today_map[reg_id] = {}
+            user_cheered_today_map[reg_id][cheer_type.value] = True
+
+    # 构建返回数据
+    data = {}
+    for reg_id in registration_ids:
+        stats = stats_map.get(reg_id)
+
+        payload = {
+            "total": stats.total_count if stats else 0,
+            "cheer_types": {
+                "cheer": stats.cheer_count if stats else 0,
+                "coffee": stats.coffee_count if stats else 0,
+                "energy": stats.energy_count if stats else 0,
+                "pizza": stats.pizza_count if stats else 0,
+                "star": stats.star_count if stats else 0,
+            },
+        }
+
+        # 仅在用户已登录时返回 user_cheered_today（按类型）
+        if current_user:
+            payload["user_cheered_today"] = user_cheered_today_map.get(reg_id, {})
+
+        data[str(reg_id)] = payload
+
+    return {"data": data}
 
 
 @router.get(

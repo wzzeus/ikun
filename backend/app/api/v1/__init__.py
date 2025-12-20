@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, contest, submission, vote, user, registration,
     github, cheer, quota, achievement, points, lottery, prediction, admin,
-    review_center, announcement, exchange, task, slot_machine, gacha
+    review_center, announcement, exchange, task, slot_machine, gacha, puzzle
 )
 
 router = APIRouter()
@@ -31,3 +31,4 @@ router.include_router(exchange.router, prefix="/exchange", tags=["积分兑换"]
 router.include_router(gacha.router, prefix="/gacha", tags=["扭蛋机"])
 router.include_router(task.router, prefix="/tasks", tags=["任务系统"])
 router.include_router(slot_machine.router, prefix="/slot-machine", tags=["老虎机"])
+router.include_router(puzzle.router, prefix="/puzzle", tags=["码神挑战"])

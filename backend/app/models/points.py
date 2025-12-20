@@ -163,6 +163,7 @@ class LotteryPrize(BaseModel):
     weight = Column(Integer, nullable=False, default=100, comment="权重")
     stock = Column(Integer, nullable=True, comment="库存数量")
     is_rare = Column(Boolean, nullable=False, default=False)
+    is_enabled = Column(Boolean, nullable=False, default=True, comment="是否启用")
 
     # 关系
     config = relationship("LotteryConfig", back_populates="prizes")

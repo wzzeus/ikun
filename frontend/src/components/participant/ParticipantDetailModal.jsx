@@ -394,7 +394,7 @@ const CHEER_TYPES = [
 /**
  * 选手详情弹窗
  */
-export default function ParticipantDetailModal({ participant, open, onClose }) {
+export default function ParticipantDetailModal({ participant, open, onClose, initialTab = null }) {
   const [githubStats, setGithubStats] = useState(null)
   const [cheerData, setCheerData] = useState(null)
   const [quotaData, setQuotaData] = useState(null)
@@ -407,6 +407,13 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
   const [activeTab, setActiveTab] = useState('intro')
   const [cheerMessage, setCheerMessage] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
+
+  // 处理初始标签（从 URL 参数传入）
+  useEffect(() => {
+    if (open && initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [open, initialTab])
 
   // 防止重复同步
   const syncingRef = useRef(false)
@@ -438,8 +445,8 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
   useEffect(() => {
     if (!open || !participant) return
 
-    // 重置状态
-    setActiveTab('intro')
+    // 重置状态（如果有 initialTab 则使用它，否则默认 intro）
+    setActiveTab(initialTab || 'intro')
     setGithubStats(null)
     setCheerData(null)
     setQuotaData(null)
@@ -473,7 +480,7 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
 
     fetchDetails()
     fetchUserItems() // 获取用户道具余额
-  }, [open, participant, fetchUserItems])
+  }, [open, participant, fetchUserItems, initialTab])
 
   // 切换到 GitHub Tab 时，如果没有数据则自动同步
   useEffect(() => {
@@ -955,18 +962,20 @@ export default function ParticipantDetailModal({ participant, open, onClose }) {
                         const balance = userItems[type] || 0
                         const canAfford = balance >= 1 // 每种道具都只消耗1个
                         const isSelf = participant.user?.id === user?.id
+                        const cheeredToday = cheerData?.user_cheered_today?.[type] || false // 今日是否已打气
                         return (
                           <Button
                             key={type}
                             variant="outline"
                             size="sm"
-                            disabled={cheeringType || !canAfford || isSelf || !isLoggedIn}
+                            disabled={cheeringType || !canAfford || isSelf || !isLoggedIn || cheeredToday}
                             onClick={() => handleCheer(type)}
                             className={cn(
                               "h-10 px-4 rounded-xl transition-all gap-2",
-                              canAfford && !isSelf && "hover:border-primary/50"
+                              canAfford && !isSelf && !cheeredToday && "hover:border-primary/50",
+                              cheeredToday && "bg-zinc-100 dark:bg-zinc-800"
                             )}
-                            title={`消耗1个${label}，+${points}分`}
+                            title={cheeredToday ? `今日已送${label}` : `消耗1个${label}，+${points}分`}
                           >
                             <Icon className={cn("w-4 h-4", canAfford ? color : "text-zinc-300")} />
                             <span>{label}</span>

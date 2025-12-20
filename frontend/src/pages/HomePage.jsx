@@ -37,8 +37,8 @@ export default function HomePage() {
 
       {/* 参赛者仪表盘 - 已报名用户显示（优先展示） */}
       {showDashboard && (
-        <section className="relative py-8 bg-slate-100 dark:bg-slate-950">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <section className="relative py-12 sm:py-16 bg-slate-100 dark:bg-slate-950">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <ContestantDashboard />
           </div>
         </section>

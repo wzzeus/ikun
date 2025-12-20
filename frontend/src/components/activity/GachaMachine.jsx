@@ -2,22 +2,36 @@
  * 扭蛋机组件
  * 消耗积分随机获得积分/道具奖励
  */
-import { useState, useEffect, useRef } from 'react'
-import { Gift, Coins, Sparkles, Loader2, Star, Heart, Coffee, Zap, Pizza, HelpCircle, Ticket, Award, Key } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Gift, Coins, Sparkles, Loader2, Star, Heart, Coffee, Zap, Pizza, HelpCircle, Ticket, Award, Key, Copy, Check } from 'lucide-react'
 import api from '../../services/api'
 import { useToast } from '../Toast'
 import { trackLottery } from '../../utils/analytics'
 import GameHelpModal, { HelpButton } from './GameHelpModal'
 
 // ============== 音效模块 ==============
-const AudioContext = window.AudioContext || window.webkitAudioContext
+const AudioContextClass = window.AudioContext || window.webkitAudioContext
+
+// 单例 AudioContext，避免频繁创建导致内存泄漏
+let sharedAudioContext = null
+
+function getAudioContext() {
+  if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+    sharedAudioContext = new AudioContextClass()
+  }
+  // 如果 AudioContext 被暂停（浏览器策略），尝试恢复
+  if (sharedAudioContext.state === 'suspended') {
+    sharedAudioContext.resume().catch(() => {})
+  }
+  return sharedAudioContext
+}
 
 /**
  * 播放扭蛋摇晃音效
  */
 function playShakeSound() {
   try {
-    const ctx = new AudioContext()
+    const ctx = getAudioContext()
     const duration = 0.08
 
     for (let i = 0; i < 3; i++) {
@@ -48,7 +62,7 @@ function playShakeSound() {
  */
 function playDropSound() {
   try {
-    const ctx = new AudioContext()
+    const ctx = getAudioContext()
 
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
@@ -92,7 +106,7 @@ function playDropSound() {
  */
 function playWinSound() {
   try {
-    const ctx = new AudioContext()
+    const ctx = getAudioContext()
 
     const notes = [523, 659, 784, 1047]
     notes.forEach((freq, i) => {
@@ -233,7 +247,9 @@ function GachaBall({ colorClass, delay = 0, isSpinning = false }) {
 /**
  * 扭蛋机主组件
  */
-export default function GachaMachine({ onBalanceUpdate }) {
+export default function GachaMachine({ onBalanceUpdate, externalBalance, userRole, refreshTrigger }) {
+  // 管理员不限次数
+  const isAdmin = userRole === 'admin'
   const toast = useToast()
   const machineRef = useRef(null)
   const mountedRef = useRef(true)
@@ -246,9 +262,32 @@ export default function GachaMachine({ onBalanceUpdate }) {
   const [isShaking, setIsShaking] = useState(false)
   const [ballsSpinning, setBallsSpinning] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const copyTimeoutRef = useRef(null)
+
+  // 复制兑换码
+  const copyApiKeyCode = async () => {
+    if (!result?.prize_value?.code) return
+    try {
+      await navigator.clipboard.writeText(result.prize_value.code)
+      setCopied(true)
+      toast.success('兑换码已复制到剪贴板')
+      // 清除之前的 timeout 防止叠加
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          setCopied(false)
+        }
+      }, 2000)
+    } catch (e) {
+      toast.error('复制失败，请手动复制')
+    }
+  }
 
   // 加载扭蛋机状态
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     try {
       const data = await api.get('/gacha/status')
       if (mountedRef.current) {
@@ -264,19 +303,47 @@ export default function GachaMachine({ onBalanceUpdate }) {
         setLoading(false)
       }
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     mountedRef.current = true
     loadStatus()
     return () => {
       mountedRef.current = false
+      // 清理复制 timeout
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
     }
-  }, [])
+  }, [loadStatus])
+
+  // 兑换券后刷新状态
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      loadStatus()
+    }
+  }, [refreshTrigger, loadStatus])
+
+  // 当外部余额变化时，同步更新内部状态
+  useEffect(() => {
+    if (externalBalance === undefined || !status) return
+    if (status.user_balance === externalBalance) return
+
+    const tickets = status.gacha_tickets || 0
+    // 管理员不受每日限制
+    const canPlayWithPoints = externalBalance >= status.cost && (isAdmin || status.remaining_today > 0)
+    setStatus(prev => ({
+      ...prev,
+      user_balance: externalBalance,
+      can_play: tickets > 0 || canPlayWithPoints,
+    }))
+  }, [externalBalance, isAdmin])
 
   // 执行抽奖
   const handlePlay = async () => {
-    if (playing || !status?.can_play) return
+    // 管理员只检查积分够不够，不检查每日限制
+    const adminCanPlay = isAdmin && status?.user_balance >= status?.cost
+    if (playing || (!status?.can_play && !adminCanPlay)) return
 
     setPlaying(true)
     setResult(null)
@@ -315,8 +382,8 @@ export default function GachaMachine({ onBalanceUpdate }) {
         const newRemainingToday = data.used_ticket
           ? (prev.remaining_today ?? prev.daily_limit)
           : Math.max(0, (prev.remaining_today ?? prev.daily_limit) - 1)
-        // can_play 逻辑：有券可以玩（不受每日限制），或者积分够且未达每日限制
-        const canPlayWithPoints = data.remaining_balance >= prev.cost && newRemainingToday > 0
+        // can_play 逻辑：有券可以玩（不受每日限制），或者积分够且未达每日限制（管理员不受限）
+        const canPlayWithPoints = data.remaining_balance >= prev.cost && (isAdmin || newRemainingToday > 0)
         return {
           ...prev,
           user_balance: data.remaining_balance,
@@ -380,12 +447,24 @@ export default function GachaMachine({ onBalanceUpdate }) {
   const handleCloseResult = () => {
     setShowResult(false)
     setResult(null)
+    setCopied(false)
+    // 清除复制 timeout
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = null
+    }
   }
 
   // 再抽一次
   const handlePlayAgain = () => {
     setShowResult(false)
     setResult(null)
+    setCopied(false)
+    // 清除复制 timeout
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = null
+    }
     handlePlay()
   }
 
@@ -419,9 +498,14 @@ export default function GachaMachine({ onBalanceUpdate }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {status?.daily_limit > 0 && (
+          {status?.daily_limit > 0 && !isAdmin && (
             <div className="text-sm text-slate-500">
               今日: {status?.today_count || 0}/{status?.daily_limit}
+            </div>
+          )}
+          {isAdmin && (
+            <div className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+              ∞ 无限
             </div>
           )}
           <HelpButton onClick={() => setShowHelp(true)} />
@@ -525,20 +609,20 @@ export default function GachaMachine({ onBalanceUpdate }) {
       </GameHelpModal>
 
       {/* 扭蛋机主体 */}
-      <div className="relative flex justify-center mb-6">
+      <div className="relative flex justify-center mb-4 sm:mb-6">
         <div
           ref={machineRef}
-          className={`relative w-48 h-56 transition-transform ${
+          className={`relative w-40 h-48 sm:w-48 sm:h-56 transition-transform ${
             isShaking ? 'animate-[shake_0.1s_ease-in-out_infinite]' : ''
           }`}
         >
           {/* 机器顶部 */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-36 h-8 bg-gradient-to-b from-red-500 to-red-600 rounded-t-3xl shadow-lg">
-            <div className="absolute top-1 left-1/2 -translate-x-1/2 w-20 h-2 bg-red-400 rounded-full" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-6 sm:h-8 bg-gradient-to-b from-red-500 to-red-600 rounded-t-3xl shadow-lg">
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 w-16 sm:w-20 h-1.5 sm:h-2 bg-red-400 rounded-full" />
           </div>
 
           {/* 透明玻璃罩 */}
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 w-40 h-32 bg-gradient-to-b from-sky-100/80 to-sky-50/60 dark:from-slate-700/80 dark:to-slate-600/60 rounded-[40%] border-4 border-red-400 overflow-hidden">
+          <div className="absolute top-5 sm:top-6 left-1/2 -translate-x-1/2 w-32 sm:w-40 h-26 sm:h-32 bg-gradient-to-b from-sky-100/80 to-sky-50/60 dark:from-slate-700/80 dark:to-slate-600/60 rounded-[40%] border-4 border-red-400 overflow-hidden">
             <div className="absolute inset-0 flex flex-wrap justify-center items-end p-2 gap-1">
               {GACHA_COLORS.map((color, idx) => (
                 <div
@@ -557,22 +641,22 @@ export default function GachaMachine({ onBalanceUpdate }) {
           </div>
 
           {/* 出口部分 */}
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-32 h-16 bg-gradient-to-b from-red-600 to-red-700 rounded-b-xl shadow-lg">
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-14 h-10 bg-slate-900 rounded-b-2xl">
+          <div className="absolute bottom-8 sm:bottom-10 left-1/2 -translate-x-1/2 w-26 sm:w-32 h-14 sm:h-16 bg-gradient-to-b from-red-600 to-red-700 rounded-b-xl shadow-lg">
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 sm:w-14 h-8 sm:h-10 bg-slate-900 rounded-b-2xl">
               <div className="absolute inset-1 bg-gradient-to-b from-slate-800 to-slate-900 rounded-b-xl" />
             </div>
           </div>
 
           {/* 底座 */}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-12 bg-gradient-to-b from-red-700 to-red-800 rounded-xl shadow-lg">
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-36 h-2 bg-red-600 rounded-full" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-36 sm:w-44 h-10 sm:h-12 bg-gradient-to-b from-red-700 to-red-800 rounded-xl shadow-lg">
+            <div className="absolute top-1.5 sm:top-2 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-1.5 sm:h-2 bg-red-600 rounded-full" />
           </div>
 
           {/* 摇杆 */}
-          <div className="absolute right-0 top-24 w-6 h-16">
-            <div className="w-3 h-12 bg-gradient-to-b from-slate-300 to-slate-400 rounded-full mx-auto" />
-            <div className="w-6 h-6 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-full shadow-lg -mt-1 flex items-center justify-center">
-              <div className="w-2 h-2 bg-yellow-300 rounded-full" />
+          <div className="absolute right-0 top-20 sm:top-24 w-5 sm:w-6 h-14 sm:h-16">
+            <div className="w-2.5 sm:w-3 h-10 sm:h-12 bg-gradient-to-b from-slate-300 to-slate-400 rounded-full mx-auto" />
+            <div className="w-5 sm:w-6 h-5 sm:h-6 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-full shadow-lg -mt-1 flex items-center justify-center">
+              <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-yellow-300 rounded-full" />
             </div>
           </div>
         </div>
@@ -597,9 +681,9 @@ export default function GachaMachine({ onBalanceUpdate }) {
       {/* 抽奖按钮 */}
       <button
         onClick={handlePlay}
-        disabled={playing || !status?.can_play}
+        disabled={playing || (!status?.can_play && !isAdmin) || (isAdmin && status?.user_balance < status?.cost && (status?.gacha_tickets || 0) === 0)}
         className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all ${
-          !status?.can_play
+          (!status?.can_play && !isAdmin) || (isAdmin && status?.user_balance < status?.cost && (status?.gacha_tickets || 0) === 0)
             ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
             : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:shadow-lg hover:shadow-purple-500/30 hover:-translate-y-0.5 active:translate-y-0'
         }`}
@@ -609,7 +693,7 @@ export default function GachaMachine({ onBalanceUpdate }) {
             <Loader2 className="w-5 h-5 animate-spin" />
             扭蛋中...
           </span>
-        ) : !status?.can_play ? (
+        ) : !status?.can_play && !isAdmin ? (
           status?.daily_limit && status?.remaining_today <= 0 ? (
             '今日次数已用完'
           ) : status?.user_balance < status?.cost && (status?.gacha_tickets || 0) === 0 ? (
@@ -617,6 +701,8 @@ export default function GachaMachine({ onBalanceUpdate }) {
           ) : (
             '暂不可用'
           )
+        ) : !status?.can_play && isAdmin && status?.user_balance < status?.cost && (status?.gacha_tickets || 0) === 0 ? (
+          '积分不足'
         ) : (status?.gacha_tickets || 0) > 0 ? (
           <span className="flex items-center justify-center gap-2">
             <Ticket className="w-5 h-5" />
@@ -637,9 +723,9 @@ export default function GachaMachine({ onBalanceUpdate }) {
 
       {/* 结果弹窗 */}
       {showResult && result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCloseResult} />
-          <div className={`relative bg-gradient-to-br ${result.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-900 via-indigo-900 to-blue-900'} rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border ${result.is_rare ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+          <div className={`relative bg-gradient-to-br ${result.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-900 via-indigo-900 to-blue-900'} rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border ${result.is_rare ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
             {/* 装饰粒子 */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               {[...Array(15)].map((_, i) => (
@@ -656,36 +742,59 @@ export default function GachaMachine({ onBalanceUpdate }) {
               ))}
             </div>
 
-            <div className="relative p-6 text-center">
+            <div className="relative p-4 sm:p-6 text-center">
               {/* 奖励图标 */}
-              <div className="relative w-24 h-24 mx-auto mb-4">
+              <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 sm:mb-4">
                 <div className={`absolute inset-0 bg-gradient-to-br ${result.is_rare ? 'from-yellow-400 to-orange-500' : 'from-purple-400 to-indigo-500'} rounded-full shadow-2xl animate-pulse`}>
-                  <div className="absolute top-3 left-4 w-6 h-6 bg-white/30 rounded-full" />
+                  <div className="absolute top-2 sm:top-3 left-3 sm:left-4 w-5 sm:w-6 h-5 sm:h-6 bg-white/30 rounded-full" />
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center">
                   {(() => {
                     const Icon = getRewardIcon(result.prize_type, result.prize_value)
-                    return <Icon className="w-10 h-10 text-white" />
+                    return <Icon className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
                   })()}
                 </div>
               </div>
 
-              <h3 className="text-2xl font-bold text-white mb-2">
+              <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
                 {result.is_rare ? '大奖！' : '恭喜获得！'}
               </h3>
 
               {/* 奖励展示 */}
-              <div className="bg-white/10 rounded-xl p-4 mb-4">
-                <div className={`text-2xl font-bold ${result.is_rare ? 'text-yellow-300' : 'text-yellow-300'}`}>
+              <div className="bg-white/10 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
+                <div className={`text-lg sm:text-2xl font-bold ${result.is_rare ? 'text-yellow-300' : 'text-yellow-300'}`}>
                   {getRewardDescription(result.prize_type, result.prize_value, result.prize_name)}
                 </div>
-                <p className="text-purple-200 text-sm mt-1">奖励已发放到您的账户</p>
+                <p className="text-purple-200 text-xs sm:text-sm mt-1">奖励已发放到您的账户</p>
               </div>
 
+              {/* API Key 兑换码显示区 */}
+              {result.prize_type === 'api_key' && result.prize_value?.code && (
+                <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4 border border-yellow-400/30">
+                  <p className="text-xs text-yellow-400/80 mb-2">🎉 兑换码（请妥善保存）</p>
+                  <div className="flex items-center gap-2 bg-black/30 rounded-lg p-2">
+                    <code className="flex-1 text-yellow-300 text-sm font-mono break-all select-all">
+                      {result.prize_value.code}
+                    </code>
+                    <button
+                      onClick={copyApiKeyCode}
+                      className="p-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-lg transition-colors"
+                      title={copied ? '已复制' : '复制兑换码'}
+                    >
+                      {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-yellow-400" />}
+                    </button>
+                  </div>
+                  {result.prize_value.quota > 0 && (
+                    <p className="text-xs text-yellow-400/60 mt-2">额度：${result.prize_value.quota}</p>
+                  )}
+                  <p className="text-xs text-white/50 mt-2">可在背包中随时查看已获得的兑换码</p>
+                </div>
+              )}
+
               {/* 剩余积分 */}
-              <div className="bg-black/20 rounded-lg px-4 py-2 mb-4">
+              <div className="bg-black/20 rounded-lg px-3 sm:px-4 py-2 mb-3 sm:mb-4">
                 <p className="text-xs text-purple-300">剩余积分</p>
-                <p className="font-bold text-white text-lg">{result.remaining_balance}</p>
+                <p className="font-bold text-white text-base sm:text-lg">{result.remaining_balance}</p>
               </div>
 
               {/* 按钮 */}

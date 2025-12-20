@@ -1,9 +1,9 @@
 """
 老虎机配置数据模型
-支持管理员配置符号、倍率、权重来控制胜率
+支持管理员配置符号、倍率、权重、规则来完全控制胜率
 """
 from sqlalchemy import (
-    Column, Integer, String, Boolean, ForeignKey, DECIMAL, Enum
+    Column, Integer, String, Boolean, ForeignKey, DECIMAL, Enum, JSON
 )
 from sqlalchemy.orm import relationship
 import enum
@@ -16,6 +16,15 @@ class SlotWinType(str, enum.Enum):
     NONE = "none"      # 未中奖
     TWO = "two"        # 两个相同
     THREE = "three"    # 三个相同
+
+
+class SlotRuleType(str, enum.Enum):
+    """老虎机规则类型"""
+    THREE_SAME = "three_same"       # 三连
+    TWO_SAME = "two_same"           # 两连
+    SPECIAL_COMBO = "special_combo" # 特殊组合
+    PENALTY = "penalty"             # 惩罚
+    BONUS = "bonus"                 # 奖励
 
 
 class SlotMachineConfig(BaseModel):
@@ -33,6 +42,7 @@ class SlotMachineConfig(BaseModel):
 
     # 关系
     symbols = relationship("SlotMachineSymbol", back_populates="config", lazy="selectin")
+    rules = relationship("SlotMachineRule", back_populates="config", lazy="selectin")
     draws = relationship("SlotMachineDraw", back_populates="config")
 
 
@@ -73,3 +83,30 @@ class SlotMachineDraw(BaseModel):
     # 关系
     user = relationship("User", backref="slot_draws")
     config = relationship("SlotMachineConfig", back_populates="draws")
+
+
+class SlotMachineRule(BaseModel):
+    """老虎机中奖规则配置"""
+    __tablename__ = "slot_machine_rules"
+
+    config_id = Column(Integer, ForeignKey("slot_machine_configs.id", ondelete="CASCADE"), nullable=False, index=True)
+    rule_key = Column(String(50), nullable=False, comment="规则唯一标识")
+    rule_name = Column(String(100), nullable=False, comment="规则名称")
+    # 使用 values_callable 确保 SQLAlchemy 用枚举的 value（如 'three_same'）而不是 name（如 'THREE_SAME'）
+    rule_type = Column(
+        Enum(SlotRuleType, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        comment="规则类型"
+    )
+    pattern = Column(JSON, nullable=True, comment="匹配模式")
+    multiplier = Column(DECIMAL(10, 2), nullable=False, default=1.00, comment="倍率")
+    fixed_points = Column(Integer, nullable=True, comment="固定奖励/惩罚积分")
+    probability = Column(DECIMAL(5, 4), nullable=True, comment="触发概率")
+    min_amount = Column(Integer, nullable=True, comment="最小金额")
+    max_amount = Column(Integer, nullable=True, comment="最大金额")
+    priority = Column(Integer, nullable=False, default=0, comment="优先级")
+    is_enabled = Column(Boolean, nullable=False, default=True, comment="是否启用")
+    description = Column(String(500), nullable=True, comment="规则描述")
+
+    # 关系
+    config = relationship("SlotMachineConfig", back_populates="rules")

@@ -73,38 +73,52 @@ class ExchangeService:
     async def get_user_today_exchange_count(
         db: AsyncSession,
         user_id: int,
-        item_id: int
+        item_id: int,
+        for_update: bool = False
     ) -> int:
-        """获取用户今日对某商品的兑换次数"""
+        """
+        获取用户今日对某商品的兑换次数
+
+        Args:
+            for_update: 是否加行锁（用于并发安全的限购校验）
+        """
         today = date.today()
-        result = await db.execute(
-            select(func.sum(ExchangeRecord.quantity))
-            .where(
-                and_(
-                    ExchangeRecord.user_id == user_id,
-                    ExchangeRecord.item_id == item_id,
-                    func.date(ExchangeRecord.created_at) == today
-                )
+        query = select(func.sum(ExchangeRecord.quantity)).where(
+            and_(
+                ExchangeRecord.user_id == user_id,
+                ExchangeRecord.item_id == item_id,
+                func.date(ExchangeRecord.created_at) == today
             )
         )
+        if for_update:
+            # 使用 FOR UPDATE 锁定相关记录，防止并发绕过限购
+            query = query.with_for_update()
+        result = await db.execute(query)
         return result.scalar() or 0
 
     @staticmethod
     async def get_user_total_exchange_count(
         db: AsyncSession,
         user_id: int,
-        item_id: int
+        item_id: int,
+        for_update: bool = False
     ) -> int:
-        """获取用户对某商品的总兑换次数"""
-        result = await db.execute(
-            select(func.sum(ExchangeRecord.quantity))
-            .where(
-                and_(
-                    ExchangeRecord.user_id == user_id,
-                    ExchangeRecord.item_id == item_id
-                )
+        """
+        获取用户对某商品的总兑换次数
+
+        Args:
+            for_update: 是否加行锁（用于并发安全的限购校验）
+        """
+        query = select(func.sum(ExchangeRecord.quantity)).where(
+            and_(
+                ExchangeRecord.user_id == user_id,
+                ExchangeRecord.item_id == item_id
             )
         )
+        if for_update:
+            # 使用 FOR UPDATE 锁定相关记录，防止并发绕过限购
+            query = query.with_for_update()
+        result = await db.execute(query)
         return result.scalar() or 0
 
     @staticmethod
@@ -152,21 +166,53 @@ class ExchangeService:
         if item.stock is not None and item.stock < quantity:
             raise ValueError("库存不足")
 
-        # 检查每日限购
-        if item.daily_limit:
-            today_count = await ExchangeService.get_user_today_exchange_count(
-                db, user_id, item_id
-            )
-            if today_count + quantity > item.daily_limit:
-                raise ValueError(f"今日限购{item.daily_limit}件，已兑换{today_count}件")
+        # ========== 使用计数表进行并发安全的限购检查 ==========
+        # 使用 INSERT ... ON DUPLICATE KEY UPDATE 原子性地增加计数
+        # 然后检查计数是否超过限制，如果超过则回滚
+        from sqlalchemy import text as sql_text
+        from datetime import date as date_type
 
-        # 检查总限购
-        if item.total_limit:
-            total_count = await ExchangeService.get_user_total_exchange_count(
-                db, user_id, item_id
-            )
-            if total_count + quantity > item.total_limit:
-                raise ValueError(f"限购{item.total_limit}件，已兑换{total_count}件")
+        today_str = date_type.today().isoformat()
+
+        if item.daily_limit or item.total_limit:
+            # 先尝试插入或更新计数记录（加行锁）
+            upsert_sql = sql_text("""
+                INSERT INTO user_item_purchase_counts
+                    (user_id, item_id, purchase_date, daily_count, total_count)
+                VALUES
+                    (:user_id, :item_id, :today, :quantity, :quantity)
+                ON DUPLICATE KEY UPDATE
+                    daily_count = IF(purchase_date = :today, daily_count + :quantity, :quantity),
+                    total_count = total_count + :quantity,
+                    purchase_date = :today
+            """)
+            await db.execute(upsert_sql, {
+                "user_id": user_id,
+                "item_id": item_id,
+                "today": today_str,
+                "quantity": quantity
+            })
+
+            # 查询更新后的计数（加行锁确保一致性）
+            count_sql = sql_text("""
+                SELECT daily_count, total_count FROM user_item_purchase_counts
+                WHERE user_id = :user_id AND item_id = :item_id
+                FOR UPDATE
+            """)
+            count_result = await db.execute(count_sql, {
+                "user_id": user_id,
+                "item_id": item_id
+            })
+            count_row = count_result.fetchone()
+
+            if count_row:
+                # 检查每日限购
+                if item.daily_limit and count_row.daily_count > item.daily_limit:
+                    raise ValueError(f"今日限购{item.daily_limit}件，请勿重复提交")
+
+                # 检查总限购
+                if item.total_limit and count_row.total_count > item.total_limit:
+                    raise ValueError(f"限购{item.total_limit}件，请勿重复提交")
 
         # 计算总消费
         total_cost = item.cost_points * quantity
@@ -211,6 +257,9 @@ class ExchangeService:
             elif item.item_type == ExchangeItemType.API_KEY:
                 # 分配API Key，按用途（item_value）从对应库存分配
                 # item_value 存储用途类型，对应 api_key_codes.description
+                # 注意：API Key 商品每次只能购买 1 个（quantity 必须为 1）
+                if quantity > 1:
+                    raise ValueError("API Key 商品每次只能兑换 1 个")
                 usage_type = item.item_value or "兑换"  # 默认用途为"兑换"
                 api_key_info = await ExchangeService._assign_api_key(db, user_id, usage_type)
                 if api_key_info:

@@ -73,21 +73,21 @@ function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
 
   if (prize.prize_type === 'EMPTY') {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
-          <div className="relative p-6 text-center">
-            <div className="w-20 h-20 mx-auto mb-4 bg-slate-600 rounded-full flex items-center justify-center">
-              <Gift className="w-10 h-10 text-slate-400" />
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
+          <div className="relative p-4 sm:p-6 text-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-slate-600 rounded-full flex items-center justify-center">
+              <Gift className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">很遗憾</h3>
-            <p className="text-slate-400 mb-4">这张刮刮乐没有中奖</p>
-            <div className="flex gap-3">
-              <button onClick={onClose} className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很遗憾</h3>
+            <p className="text-sm sm:text-base text-slate-400 mb-4">这张刮刮乐没有中奖</p>
+            <div className="flex gap-2 sm:gap-3">
+              <button onClick={onClose} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
                 好的
               </button>
               {canPlayAgain && (
-                <button onClick={onPlayAgain} className="flex-1 py-2.5 bg-gradient-to-r from-orange-500 to-red-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+                <button onClick={onPlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-orange-500 to-red-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
                   再来一张
                 </button>
               )}
@@ -100,15 +100,15 @@ function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-orange-800 via-red-800 to-pink-800'} rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-orange-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-orange-800 via-red-800 to-pink-800'} rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-orange-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
         {/* 装饰粒子 */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {[...Array(20)].map((_, i) => (
             <div
               key={i}
-              className={`absolute w-2 h-2 ${prize.is_rare ? 'bg-yellow-300' : 'bg-orange-300'} rounded-full animate-ping`}
+              className={`absolute w-1.5 h-1.5 sm:w-2 sm:h-2 ${prize.is_rare ? 'bg-yellow-300' : 'bg-orange-300'} rounded-full animate-ping`}
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
@@ -119,73 +119,73 @@ function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
           ))}
         </div>
 
-        <div className="relative p-6 text-center">
+        <div className="relative p-4 sm:p-6 text-center">
           {/* 关闭按钮 */}
-          <button onClick={onClose} className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-white/70" />
+          <button onClick={onClose} className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4 sm:w-5 sm:h-5 text-white/70" />
           </button>
 
           {/* 奖励图标 */}
-          <div className="relative w-24 h-24 mx-auto mb-4">
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 sm:mb-4">
             <div className={`absolute inset-0 bg-gradient-to-br ${prize.is_rare ? 'from-yellow-400 to-orange-500' : 'from-orange-400 to-red-500'} rounded-full shadow-2xl ${prize.is_rare ? 'animate-pulse' : ''}`}>
-              <div className="absolute top-3 left-4 w-6 h-6 bg-white/30 rounded-full" />
+              <div className="absolute top-2 sm:top-3 left-3 sm:left-4 w-5 sm:w-6 h-5 sm:h-6 bg-white/30 rounded-full" />
             </div>
             <div className="absolute inset-0 flex items-center justify-center">
-              <Icon className="w-12 h-12 text-white" />
+              <Icon className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
             </div>
           </div>
 
-          <h3 className="text-2xl font-bold text-white mb-2">
+          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
             {prize.is_rare ? '大奖来袭！' : '恭喜中奖！'}
           </h3>
 
           {/* 奖励展示 */}
-          <div className="bg-white/10 rounded-xl p-4 mb-4">
-            <div className={`text-2xl font-bold ${prize.is_rare ? 'text-yellow-300' : 'text-orange-200'}`}>
+          <div className="bg-white/10 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
+            <div className={`text-lg sm:text-2xl font-bold ${prize.is_rare ? 'text-yellow-300' : 'text-orange-200'}`}>
               {prize.prize_name}
             </div>
             {prize.is_rare && (
               <div className="flex items-center justify-center gap-1 mt-2 text-yellow-400">
-                <Star className="w-4 h-4" />
-                <span className="text-sm font-medium">稀有奖品</span>
-                <Star className="w-4 h-4" />
+                <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="text-xs sm:text-sm font-medium">稀有奖品</span>
+                <Star className="w-3 h-3 sm:w-4 sm:h-4" />
               </div>
             )}
 
             {/* API Key 兑换码显示区 */}
             {prize.prize_type === 'API_KEY' && prize.api_key_code && (
-              <div className="mt-3 p-3 bg-black/30 rounded-lg">
-                <p className="text-xs text-yellow-400/80 mb-2">兑换码（请妥善保存）</p>
+              <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-black/30 rounded-lg">
+                <p className="text-xs text-yellow-400/80 mb-1 sm:mb-2">兑换码（请妥善保存）</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-yellow-300 font-mono break-all select-all">
+                  <code className="flex-1 bg-black/40 px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm text-yellow-300 font-mono break-all select-all">
                     {prize.api_key_code}
                   </code>
                   <button
                     onClick={handleCopyCode}
-                    className={`p-2 rounded-lg transition-all ${
+                    className={`p-1.5 sm:p-2 rounded-lg transition-all ${
                       copied
                         ? 'bg-green-500/30 text-green-300'
                         : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
                     }`}
                     title={copied ? '已复制' : '复制兑换码'}
                   >
-                    {copied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                    {copied ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" /> : <Copy className="w-4 h-4 sm:w-5 sm:h-5" />}
                   </button>
                 </div>
-                <p className="text-xs text-white/50 mt-2">可在背包中随时查看已获得的兑换码</p>
+                <p className="text-xs text-white/50 mt-1 sm:mt-2">可在背包中随时查看已获得的兑换码</p>
               </div>
             )}
 
-            <p className="text-orange-200 text-sm mt-2">奖励已发放到您的账户</p>
+            <p className="text-orange-200 text-xs sm:text-sm mt-2">奖励已发放到您的账户</p>
           </div>
 
           {/* 按钮 */}
-          <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+          <div className="flex gap-2 sm:gap-3">
+            <button onClick={onClose} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
               好的
             </button>
             {canPlayAgain && (
-              <button onClick={onPlayAgain} className="flex-1 py-2.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+              <button onClick={onPlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
                 再来一张
               </button>
             )}
@@ -218,7 +218,7 @@ function ScratchCardSkeleton() {
 }
 
 // 刮刮乐卡片 Canvas
-function ScratchCanvas({ cardId, onReveal, revealed, prize, onQuickReveal }) {
+function ScratchCanvas({ cardId, onReveal, revealed, prize, revealFailed }) {
   const canvasRef = useRef(null)
   const [isScratching, setIsScratching] = useState(false)
   const [scratchPercent, setScratchPercent] = useState(0)
@@ -237,13 +237,6 @@ function ScratchCanvas({ cardId, onReveal, revealed, prize, onQuickReveal }) {
     setScratchPercent(100)
     onReveal()
   }, [revealed, autoRevealed, onReveal])
-
-  // 将一键开奖方法暴露给父组件
-  useEffect(() => {
-    if (onQuickReveal) {
-      onQuickReveal(handleQuickReveal)
-    }
-  }, [onQuickReveal, handleQuickReveal])
 
   // 初始化 canvas
   useEffect(() => {
@@ -396,33 +389,40 @@ function ScratchCanvas({ cardId, onReveal, revealed, prize, onQuickReveal }) {
   }
 
   return (
-    <div className="relative w-full h-40 rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700">
+    <div className="relative w-full h-32 sm:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700">
       {/* 底层奖品显示 */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {revealed || autoRevealed ? (
-          prize ? (
+          revealFailed ? (
+            // 揭晓失败状态
             <>
-              <Gift className={`w-10 h-10 mb-2 ${prize.is_rare ? 'text-yellow-500' : 'text-purple-500'}`} />
-              <p className={`font-bold text-lg ${prize.is_rare ? 'text-yellow-600' : 'text-purple-600'}`}>
+              <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 mb-2 text-red-500" />
+              <p className="font-bold text-base sm:text-lg text-red-600">揭晓失败</p>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">请重试或重新购买</p>
+            </>
+          ) : prize ? (
+            <>
+              <Gift className={`w-8 h-8 sm:w-10 sm:h-10 mb-2 ${prize.is_rare ? 'text-yellow-500' : 'text-purple-500'}`} />
+              <p className={`font-bold text-base sm:text-lg ${prize.is_rare ? 'text-yellow-600' : 'text-purple-600'}`}>
                 {prize.prize_name}
               </p>
               {prize.is_rare && (
                 <div className="flex items-center gap-1 mt-1 text-yellow-500">
-                  <Star className="w-4 h-4" />
-                  <span className="text-sm font-medium">稀有奖品</span>
+                  <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="text-xs sm:text-sm font-medium">稀有奖品</span>
                 </div>
               )}
             </>
           ) : (
             <>
-              <RefreshCw className="w-8 h-8 text-slate-400 animate-spin mb-2" />
-              <p className="text-slate-500">揭晓中...</p>
+              <RefreshCw className="w-6 h-6 sm:w-8 sm:h-8 text-slate-400 animate-spin mb-2" />
+              <p className="text-sm text-slate-500">揭晓中...</p>
             </>
           )
         ) : (
           <div className="text-center text-slate-400">
-            <Sparkles className="w-8 h-8 mx-auto mb-2" />
-            <p className="text-sm">刮开查看奖品</p>
+            <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-2" />
+            <p className="text-xs sm:text-sm">刮开查看奖品</p>
           </div>
         )}
       </div>
@@ -464,7 +464,9 @@ function ScratchCanvas({ cardId, onReveal, revealed, prize, onQuickReveal }) {
 }
 
 // 主组件
-export default function ScratchCard({ onBalanceUpdate }) {
+export default function ScratchCard({ onBalanceUpdate, externalBalance, userRole, refreshTrigger }) {
+  // 管理员不限次数
+  const isAdmin = userRole === 'admin'
   const toast = useToast()
 
   const [loading, setLoading] = useState(true)
@@ -495,9 +497,37 @@ export default function ScratchCard({ onBalanceUpdate }) {
     loadScratchInfo()
   }, [loadScratchInfo])
 
+  // 兑换券后刷新状态
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      loadScratchInfo()
+    }
+  }, [refreshTrigger, loadScratchInfo])
+
+  // 当外部余额变化时，同步更新内部状态
+  useEffect(() => {
+    if (externalBalance !== undefined && scratchInfo) {
+      setScratchInfo(prev => {
+        if (!prev || prev.balance === externalBalance) return prev
+        const tickets = prev.scratch_tickets || 0
+        // 管理员不受每日限制
+        const canDrawWithPoints = externalBalance >= prev.cost_points && (
+          isAdmin || prev.daily_limit === null || prev.today_count < prev.daily_limit
+        )
+        return {
+          ...prev,
+          balance: externalBalance,
+          can_draw: tickets > 0 || canDrawWithPoints,
+        }
+      })
+    }
+  }, [externalBalance, isAdmin])
+
   // 购买刮刮乐
   const handleBuy = async () => {
-    if (buying || !scratchInfo?.can_draw) return
+    // 管理员只检查积分够不够，不检查每日限制
+    const adminCanBuy = isAdmin && scratchInfo?.balance >= scratchInfo?.cost_points
+    if (buying || (!scratchInfo?.can_draw && !adminCanBuy)) return
     setBuying(true)
     setPrize(null)
     try {
@@ -509,9 +539,9 @@ export default function ScratchCard({ onBalanceUpdate }) {
         // 如果使用了券，扣减券数量
         const newTickets = result.used_ticket ? Math.max(0, (prev?.scratch_tickets || 0) - 1) : prev?.scratch_tickets
         const newTodayCount = (prev?.today_count || 0) + 1
-        // can_draw 逻辑：有券可以玩（不受每日限制），或者积分够且未达每日限制
+        // can_draw 逻辑：有券可以玩（不受每日限制），或者积分够且未达每日限制（管理员不受限）
         const canDrawWithPoints = result.remaining_balance >= prev?.cost_points && (
-          prev?.daily_limit === null || newTodayCount < prev?.daily_limit
+          isAdmin || prev?.daily_limit === null || newTodayCount < prev?.daily_limit
         )
         return {
           ...prev,
@@ -535,8 +565,11 @@ export default function ScratchCard({ onBalanceUpdate }) {
   }
 
   // 揭晓奖品
+  const [revealing, setRevealing] = useState(false)
+
   const handleReveal = async () => {
-    if (!currentCard || currentCard.revealed) return
+    if (!currentCard || currentCard.revealed || revealing) return
+    setRevealing(true)
     try {
       const result = await lotteryApi.revealScratchCard(currentCard.id)
       setPrize(result)
@@ -545,7 +578,21 @@ export default function ScratchCard({ onBalanceUpdate }) {
       setShowCelebration(true)
       trackLottery('scratch', scratchInfo?.cost_points || 30, result.prize_name)
     } catch (err) {
-      toast.error(err.response?.data?.detail || '揭晓失败')
+      const errorMsg = err.response?.data?.detail || '揭晓失败'
+      toast.error(errorMsg)
+      // 揭晓失败时，提供重置选项让用户可以重试
+      // 如果是"卡片不存在"等严重错误，直接重置
+      if (errorMsg.includes('不存在') || errorMsg.includes('不属于')) {
+        setCurrentCard(null)
+        setPrize(null)
+        toast.info('请重新购买刮刮乐')
+      }
+      // 其他错误：标记已揭晓以显示重置按钮，让用户可以重新开始
+      else {
+        setCurrentCard((prev) => ({ ...prev, revealed: true, revealFailed: true }))
+      }
+    } finally {
+      setRevealing(false)
     }
   }
 
@@ -636,9 +683,14 @@ export default function ScratchCard({ onBalanceUpdate }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {scratchInfo?.daily_limit && (
+          {scratchInfo?.daily_limit && !isAdmin && (
             <div className="text-sm text-slate-500">
               今日: {scratchInfo?.today_count || 0}/{scratchInfo?.daily_limit}
+            </div>
+          )}
+          {isAdmin && (
+            <div className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+              ∞ 无限
             </div>
           )}
           <HelpButton onClick={() => setShowHelp(true)} />
@@ -689,6 +741,7 @@ export default function ScratchCard({ onBalanceUpdate }) {
             onReveal={handleReveal}
             revealed={currentCard.revealed}
             prize={prize}
+            revealFailed={currentCard.revealFailed}
           />
 
           {/* 已揭晓后的操作 */}
@@ -716,26 +769,28 @@ export default function ScratchCard({ onBalanceUpdate }) {
       ) : (
         <>
           {/* 购买提示 */}
-          <div className="relative w-full h-40 rounded-xl overflow-hidden bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 flex flex-col items-center justify-center">
-            <Ticket className="w-12 h-12 text-orange-500 mb-2" />
-            <p className="text-orange-600 dark:text-orange-400 font-medium">购买刮刮乐试试手气</p>
-            <p className="text-sm text-orange-500/70 mt-1">有机会获得神秘兑换码</p>
+          <div className="relative w-full h-32 sm:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 flex flex-col items-center justify-center">
+            <Ticket className="w-10 h-10 sm:w-12 sm:h-12 text-orange-500 mb-2" />
+            <p className="text-sm sm:text-base text-orange-600 dark:text-orange-400 font-medium">购买刮刮乐试试手气</p>
+            <p className="text-xs sm:text-sm text-orange-500/70 mt-1">有机会获得神秘兑换码</p>
           </div>
 
           {/* 购买按钮 */}
           <button
             onClick={handleBuy}
-            disabled={buying || !scratchInfo?.can_draw}
+            disabled={buying || (!scratchInfo?.can_draw && !isAdmin) || (isAdmin && scratchInfo?.balance < scratchInfo?.cost_points && (scratchInfo?.scratch_tickets || 0) === 0)}
             className={`w-full mt-4 py-3 rounded-xl font-bold text-lg transition-all ${
-              !scratchInfo?.can_draw
+              (!scratchInfo?.can_draw && !isAdmin) || (isAdmin && scratchInfo?.balance < scratchInfo?.cost_points && (scratchInfo?.scratch_tickets || 0) === 0)
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                 : 'bg-gradient-to-r from-orange-500 to-red-500 text-white hover:shadow-lg hover:shadow-orange-500/30'
             }`}
           >
             {buying ? (
               <RefreshCw className="w-5 h-5 animate-spin mx-auto" />
-            ) : !scratchInfo?.can_draw ? (
+            ) : !scratchInfo?.can_draw && !isAdmin ? (
               scratchInfo?.balance < scratchInfo?.cost_points && (scratchInfo?.scratch_tickets || 0) === 0 ? '积分不足' : '今日次数已用完'
+            ) : isAdmin && scratchInfo?.balance < scratchInfo?.cost_points && (scratchInfo?.scratch_tickets || 0) === 0 ? (
+              '积分不足'
             ) : (scratchInfo?.scratch_tickets || 0) > 0 ? (
               <span className="flex items-center justify-center gap-2">
                 <Ticket className="w-5 h-5" />

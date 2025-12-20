@@ -234,6 +234,24 @@ class PredictionService:
                 bet.payout_points = 0
                 stats["loser_count"] += 1
 
+            # 更新成就统计（为所有参与者更新）
+            from app.services.achievement_service import (
+                update_user_stats_on_prediction, check_and_unlock_achievements
+            )
+            # 收集所有参与用户
+            all_user_ids = set()
+            if winner_total_stake > 0:
+                for bet in winner_bets:
+                    all_user_ids.add(bet.user_id)
+            for bet in loser_bets:
+                all_user_ids.add(bet.user_id)
+
+            # 为每个用户更新成就统计
+            for user_id in all_user_ids:
+                is_winner = user_id in {bet.user_id for bet in winner_bets} if winner_total_stake > 0 else False
+                user_stats = await update_user_stats_on_prediction(db, user_id, is_winner)
+                await check_and_unlock_achievements(db, user_id, user_stats)
+
             await db.commit()
             return stats
 
@@ -385,6 +403,8 @@ class PredictionService:
                 raise ValueError("无效的竞猜选项")
 
             # 验证下注金额
+            if stake_points <= 0:
+                raise ValueError("下注金额必须为正整数")
             if stake_points < market.min_bet:
                 raise ValueError(f"最低下注 {market.min_bet} 积分")
             if market.max_bet and stake_points > market.max_bet:

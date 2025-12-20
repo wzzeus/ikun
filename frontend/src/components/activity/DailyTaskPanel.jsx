@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   CheckCircle2,
   Gift,
@@ -9,6 +9,7 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Coins,
   Sparkles,
   Award,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '../Toast'
 import { taskApi, achievementApi } from '../../services'
+import { getTaskGuidePath, canNavigateToGuide } from '../../utils/taskGuide'
 
 // 任务类型图标映射
 const TASK_ICONS = {
@@ -49,7 +51,7 @@ const TASK_BG_COLORS = {
 }
 
 // 紧凑任务项
-function CompactTaskItem({ item, onClaim, claiming }) {
+function CompactTaskItem({ item, onClaim, claiming, onNavigate }) {
   const { task, progress } = item
   const Icon = TASK_ICONS[task.task_type] || Target
   const bgColor = TASK_BG_COLORS[task.task_type] || 'bg-slate-500'
@@ -59,17 +61,41 @@ function CompactTaskItem({ item, onClaim, claiming }) {
   const progressPercent = progress?.progress_percent || 0
   const isCompleted = progress?.is_completed || false
   const isClaimed = progress?.is_claimed || false
-  const isChainBonus = task.task_type === 'CHAIN_BONUS'
+
+  // 使用共享函数判断是否可跳转
+  const canNavigate = canNavigateToGuide({
+    taskType: task.task_type,
+    isCompleted,
+    isClaimed,
+  })
+  const guidePath = getTaskGuidePath(task.task_type)
+
+  const handleClick = () => {
+    if (canNavigate && onNavigate && guidePath) {
+      onNavigate(guidePath, task.name || task.task_type)
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (canNavigate && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault()
+      handleClick()
+    }
+  }
 
   return (
     <div
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role={canNavigate ? 'button' : undefined}
+      tabIndex={canNavigate ? 0 : undefined}
       className={`relative flex items-center gap-2 p-2 rounded-lg transition-all ${
         isClaimed
           ? 'bg-slate-100 dark:bg-slate-800/50 opacity-50'
           : isCompleted
           ? 'bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700'
           : 'bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80'
-      }`}
+      } ${canNavigate ? 'cursor-pointer hover:ring-1 hover:ring-blue-300 dark:hover:ring-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500' : ''}`}
     >
       {/* 图标 */}
       <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${bgColor}`}>
@@ -105,12 +131,15 @@ function CompactTaskItem({ item, onClaim, claiming }) {
       </div>
 
       {/* 领取按钮/状态 */}
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 flex items-center gap-1">
         {isClaimed ? (
           <CheckCircle2 className="w-4 h-4 text-green-500" />
         ) : isCompleted ? (
           <button
-            onClick={() => onClaim(task.id)}
+            onClick={(e) => {
+              e.stopPropagation()
+              onClaim(task.id)
+            }}
             disabled={claiming}
             className="flex items-center gap-0.5 px-2 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white rounded text-[10px] font-medium transition-all disabled:opacity-50"
           >
@@ -123,6 +152,11 @@ function CompactTaskItem({ item, onClaim, claiming }) {
               </>
             )}
           </button>
+        ) : canNavigate ? (
+          <div className="flex items-center gap-1 text-blue-500">
+            <span className="text-[10px]">+{task.reward_points}</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </div>
         ) : (
           <span className="text-[10px] text-slate-400">+{task.reward_points}</span>
         )}
@@ -220,6 +254,7 @@ function TaskSkeleton() {
 // 任务面板主组件
 export default function DailyTaskPanel({ onBalanceUpdate }) {
   const toast = useToast()
+  const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
   const [dailyData, setDailyData] = useState(null)
   const [weeklyData, setWeeklyData] = useState(null)
@@ -296,6 +331,12 @@ export default function DailyTaskPanel({ onBalanceUpdate }) {
       setClaimingAchievement(null)
     }
   }
+
+  // 跳转到任务引导页
+  const handleNavigate = useCallback((path, taskName) => {
+    toast.info(`前往完成「${taskName}」`)
+    navigate(path)
+  }, [navigate, toast])
 
   // 计算统计
   const dailyStats = dailyData?.stats || { total: 0, completed: 0, claimed: 0 }
@@ -381,6 +422,7 @@ export default function DailyTaskPanel({ onBalanceUpdate }) {
                         item={item}
                         onClaim={handleClaimTask}
                         claiming={claiming === item.task.id}
+                        onNavigate={handleNavigate}
                       />
                     ))}
                   </div>
@@ -401,6 +443,7 @@ export default function DailyTaskPanel({ onBalanceUpdate }) {
                         item={item}
                         onClaim={handleClaimTask}
                         claiming={claiming === item.task.id}
+                        onNavigate={handleNavigate}
                       />
                     ))}
                   </div>
