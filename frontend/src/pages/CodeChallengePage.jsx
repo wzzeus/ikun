@@ -1251,6 +1251,7 @@ export default function CodeChallengePage() {
   const [showEncouragement, setShowEncouragement] = useState(false)
   const [encouragementMessage, setEncouragementMessage] = useState(null)
   const consecutiveErrorsRef = useRef(0)
+  const onCloseEncouragementRef = useRef(() => setShowEncouragement(false))
 
   // 奖励弹窗相关状态
   const [showRewardModal, setShowRewardModal] = useState(false)
@@ -1812,7 +1813,7 @@ export default function CodeChallengePage() {
       <EncouragementModal
         isOpen={showEncouragement}
         message={encouragementMessage}
-        onClose={() => setShowEncouragement(false)}
+        onClose={onCloseEncouragementRef.current}
       />
 
       {/* 奖励领取弹窗 */}
