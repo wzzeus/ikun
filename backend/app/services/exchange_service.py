@@ -254,14 +254,20 @@ class ExchangeService:
                 )
                 reward_message = f"获得{quantity}张扭蛋券"
 
+            elif item.item_type == ExchangeItemType.SLOT_TICKET:
+                await ExchangeService._add_user_quota(
+                    db, user_id, "SLOT_TICKET", quantity
+                )
+                reward_message = f"获得{quantity}张老虎机券"
+
             elif item.item_type == ExchangeItemType.API_KEY:
-                # 分配API Key，按用途（item_value）从对应库存分配
-                # item_value 存储用途类型，对应 api_key_codes.description
+                # 分配API Key，按金额（item_value）从对应库存分配
+                # item_value 存储金额，如 "5", "10", "20", "50"
                 # 注意：API Key 商品每次只能购买 1 个（quantity 必须为 1）
                 if quantity > 1:
                     raise ValueError("API Key 商品每次只能兑换 1 个")
-                usage_type = item.item_value or "兑换"  # 默认用途为"兑换"
-                api_key_info = await ExchangeService._assign_api_key(db, user_id, usage_type)
+                quota_amount = float(item.item_value) if item.item_value else 5  # 默认5美元
+                api_key_info = await ExchangeService._assign_api_key_by_quota(db, user_id, quota_amount)
                 if api_key_info:
                     reward_value = api_key_info["code"][:8] + "****"
                     quota_display = f"${api_key_info['quota']}" if api_key_info['quota'] else ""
@@ -339,7 +345,7 @@ class ExchangeService:
         usage_type: str = None
     ) -> Optional[Dict[str, Any]]:
         """
-        分配一个API Key给用户
+        分配一个API Key给用户（按用途类型）
 
         Args:
             db: 数据库会话
@@ -371,6 +377,53 @@ class ExchangeService:
             "code": api_key.code,
             "quota": float(api_key.quota) if api_key.quota else 0,
             "description": api_key.description
+        }
+
+    @staticmethod
+    async def _assign_api_key_by_quota(
+        db: AsyncSession,
+        user_id: int,
+        quota_amount: float
+    ) -> Optional[Dict[str, Any]]:
+        """
+        分配一个指定金额的 API Key 给用户（用于积分兑换）
+
+        Args:
+            db: 数据库会话
+            user_id: 用户ID
+            quota_amount: 金额（如 5, 10, 20, 50）
+
+        Returns:
+            分配成功返回包含 code 和 quota 的字典，失败返回 None
+        """
+        from decimal import Decimal
+
+        # 按金额匹配可用的 API Key
+        result = await db.execute(
+            select(ApiKeyCode)
+            .where(
+                and_(
+                    ApiKeyCode.status == ApiKeyStatus.AVAILABLE,
+                    ApiKeyCode.quota == Decimal(str(quota_amount))
+                )
+            )
+            .limit(1)
+            .with_for_update()
+        )
+        api_key = result.scalar_one_or_none()
+
+        if not api_key:
+            return None
+
+        api_key.status = ApiKeyStatus.ASSIGNED
+        api_key.assigned_user_id = user_id
+        api_key.assigned_at = datetime.now()
+        api_key.description = "兑换"  # 标记为兑换来源
+
+        return {
+            "code": api_key.code,
+            "quota": float(api_key.quota) if api_key.quota else 0,
+            "description": "兑换"
         }
 
     @staticmethod

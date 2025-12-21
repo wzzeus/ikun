@@ -195,6 +195,24 @@ export const lotteryApi = {
   getEasterEggStatus: () => api.get('/lottery/easter-egg/status'),
   // 领取彩蛋
   claimEasterEgg: () => api.post('/lottery/easter-egg/claim'),
+
+  // 管理员测试
+  // 强制抽中 API Key（仅管理员）- 幸运抽奖
+  adminTestDrawApiKey: () => api.post('/lottery/admin/test-draw-apikey'),
+  // 强制抽中 API Key（仅管理员）- 刮刮乐
+  adminTestScratchDrawApiKey: () => api.post('/lottery/scratch/admin/test-draw-apikey'),
+}
+
+/**
+ * 扭蛋机 API
+ */
+export const gachaApi = {
+  // 获取扭蛋机状态
+  getStatus: () => api.get('/gacha/status'),
+  // 扭蛋
+  play: (useTicket = false) => api.post('/gacha/play', { use_ticket: useTicket }),
+  // 管理员测试：强制抽中 API Key
+  adminTestDrawApiKey: () => api.post('/gacha/admin/test-draw-apikey'),
 }
 
 /**
@@ -276,6 +294,18 @@ export const adminApi2 = {
   updateSlotMachineConfig: (data) => api.put('/slot-machine/admin/config', data),
   replaceSlotMachineSymbols: (data) => api.put('/slot-machine/admin/symbols', data),
   getSlotMachineStats: (days = 7) => api.get('/slot-machine/admin/stats', { params: { days } }),
+}
+
+/**
+ * 老虎机 API
+ */
+export const slotMachineApi = {
+  // 获取配置
+  getConfig: () => api.get('/slot-machine/config'),
+  // 抽奖
+  spin: () => api.post('/slot-machine/spin'),
+  // 管理员测试：强制抽中 API Key
+  adminTestDrawApiKey: () => api.post('/slot-machine/admin/test-draw-apikey'),
 }
 
 /**

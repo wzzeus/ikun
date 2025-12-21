@@ -5,13 +5,17 @@
 - 获取选手的额度信息
 - 获取额度消耗排行榜
 - 获取调用日志
+- 获取选手在线状态
 """
+import asyncio
 import logging
 import httpx
+import time
+from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -23,6 +27,85 @@ from app.services.quota_service import quota_service, QuotaInfo
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# ========== Contest 级别在线状态缓存（避免惊群） ==========
+@dataclass
+class _ContestOnlineCacheEntry:
+    """Contest 在线状态缓存条目"""
+    data: dict[int, bool]
+    created_at: float
+    lock: asyncio.Lock
+
+
+_contest_online_cache: dict[int, _ContestOnlineCacheEntry] = {}
+_CONTEST_ONLINE_CACHE_TTL = 10  # 10秒缓存
+
+
+async def _get_contest_online_status_cached(
+    contest_id: int,
+    db: AsyncSession
+) -> dict[int, bool]:
+    """
+    获取 contest 的在线状态（带缓存，避免惊群）
+    """
+    global _contest_online_cache
+
+    now = time.time()
+    entry = _contest_online_cache.get(contest_id)
+
+    # 缓存命中且未过期
+    if entry and (now - entry.created_at) < _CONTEST_ONLINE_CACHE_TTL:
+        return entry.data
+
+    # 需要刷新：创建或复用锁
+    if entry is None:
+        entry = _ContestOnlineCacheEntry(
+            data={},
+            created_at=0,
+            lock=asyncio.Lock()
+        )
+        _contest_online_cache[contest_id] = entry
+
+    # 尝试获取锁，避免同时多个请求都去查询
+    if entry.lock.locked():
+        # 另一个协程正在刷新，等待完成后返回缓存
+        async with entry.lock:
+            return entry.data
+
+    async with entry.lock:
+        # 双重检查：可能在等锁期间已被其他协程刷新
+        now = time.time()
+        if (now - entry.created_at) < _CONTEST_ONLINE_CACHE_TTL:
+            return entry.data
+
+        # 执行实际查询
+        reg_query = (
+            select(Registration.id, Registration.api_key)
+            .where(
+                Registration.contest_id == contest_id,
+                Registration.status.in_([
+                    RegistrationStatus.SUBMITTED.value,
+                    RegistrationStatus.APPROVED.value,
+                ])
+            )
+        )
+        reg_result = await db.execute(reg_query)
+        rows = reg_result.all()
+
+        api_keys: list[tuple[int, str]] = []
+        for row in rows:
+            reg_id = row[0]
+            api_key = row[1] or ""
+            api_keys.append((reg_id, api_key))
+
+        status_map = await quota_service.batch_get_online_status(api_keys)
+
+        # 更新缓存
+        entry.data = status_map
+        entry.created_at = time.time()
+
+        return status_map
 
 
 @router.get(
@@ -122,6 +205,31 @@ async def get_quota_leaderboard(
         "successful_queries": len([i for i in items if i["status"] == "ok"]),
         "failed_queries": len([i for i in items if i["status"] == "error"]),
     }
+
+
+@router.get(
+    "/contests/{contest_id}/online-status",
+    summary="获取选手在线状态",
+    description="基于第三方 /api/log/token 的使用日志判断在线状态：最近 5 分钟内有调用记录则在线。",
+)
+async def get_contest_online_status(
+    contest_id: int,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取比赛所有选手的在线状态
+
+    Returns:
+        {registration_id: bool} 字典，True 表示在线
+    """
+    # 使用 contest 级别缓存，避免惊群效应
+    status_map = await _get_contest_online_status_cached(contest_id, db)
+
+    # 设置 HTTP 缓存，与内存缓存对齐
+    response.headers["Cache-Control"] = f"public, max-age={_CONTEST_ONLINE_CACHE_TTL}"
+
+    return status_map
 
 
 @router.get(

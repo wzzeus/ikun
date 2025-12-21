@@ -118,13 +118,11 @@ async def get_user_tickets(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取用户的券数量"""
+    """获取用户的券数量（动态返回所有券类型）"""
     tickets = await ExchangeService.get_user_tickets(db, current_user.id)
-    return {
-        "lottery_tickets": tickets.get("LOTTERY_TICKET", 0),
-        "scratch_tickets": tickets.get("SCRATCH_TICKET", 0),
-        "gacha_tickets": tickets.get("GACHA_TICKET", 0),
-    }
+    # 直接返回原始格式 {LOTTERY_TICKET: 5, SCRATCH_TICKET: 3, ...}
+    # 前端可以自动适配新增的券类型
+    return tickets
 
 
 # ========== 管理员接口 ==========

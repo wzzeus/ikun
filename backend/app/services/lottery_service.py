@@ -227,7 +227,10 @@ class LotteryService:
             prize = await LotteryService._select_prize(prizes)
 
             # 处理奖品发放
+            prize_name = prize.prize_name
+            prize_type_value = prize.prize_type.value
             prize_value = prize.prize_value
+            is_rare = prize.is_rare
             extra_message = None
             api_key_code = None  # 完整的 API Key 兑换码
 
@@ -246,18 +249,12 @@ class LotteryService:
                     quota_display = f"${api_key_info['quota']}" if api_key_info['quota'] else ""
                     extra_message = f"恭喜获得{quota_display}兑换码！"
                 else:
-                    # API Key库存不足，改为发放积分作为补偿
-                    compensation = 100
-                    await PointsService.add_points(
-                        db=db,
-                        user_id=user_id,
-                        amount=compensation,
-                        reason=PointsReason.LOTTERY_WIN,
-                        description="API Key库存不足补偿",
-                        auto_commit=False
-                    )
-                    prize_value = str(compensation)
-                    extra_message = f"API Key已抽完，补偿{compensation}积分"
+                    # API Key库存不足，仅提示用户
+                    prize_name = "API Key（已发完）"
+                    prize_type_value = PrizeType.EMPTY.value
+                    prize_value = ""
+                    is_rare = False
+                    extra_message = "🎁 抱歉，API Key兑换码已被抽完！"
 
             elif prize.prize_type == PrizeType.POINTS:
                 # 发放积分
@@ -285,16 +282,16 @@ class LotteryService:
                     await db.rollback()
                     raise ValueError("奖品库存不足，请重试")
 
-            # 创建抽奖记录
+            # 创建抽奖记录（使用可能被修改的奖品信息）
             draw = LotteryDraw(
                 user_id=user_id,
                 config_id=config.id,
                 cost_points=actual_cost,  # 使用实际消耗（使用券时为0）
                 prize_id=prize.id,
-                prize_type=prize.prize_type.value,
-                prize_name=prize.prize_name,
+                prize_type=prize_type_value,  # 使用修改后的类型
+                prize_name=prize_name,  # 使用修改后的名称
                 prize_value=prize_value,
-                is_rare=prize.is_rare,
+                is_rare=is_rare,  # 使用修改后的稀有度
                 request_id=request_id
             )
             db.add(draw)
@@ -347,10 +344,10 @@ class LotteryService:
             "success": True,
             "is_duplicate": False,
             "prize_id": prize.id,
-            "prize_name": prize.prize_name,
-            "prize_type": prize.prize_type.value,
+            "prize_name": prize_name,  # 使用修改后的名称（API Key库存不足时会显示补偿信息）
+            "prize_type": prize_type_value,  # 使用修改后的类型
             "prize_value": prize_value,
-            "is_rare": prize.is_rare,
+            "is_rare": is_rare,  # 使用修改后的稀有度
             "message": extra_message,
             "cost_points": actual_cost,  # 实际消耗的积分（使用券时为0）
             "used_ticket": used_ticket,  # 是否使用了抽奖券
@@ -501,7 +498,9 @@ class LotteryService:
                 "code": key.code,
                 "status": key.status.value,
                 "assigned_at": key.assigned_at.isoformat() if key.assigned_at else None,
-                "expires_at": key.expires_at.isoformat() if key.expires_at else None
+                "expires_at": key.expires_at.isoformat() if key.expires_at else None,
+                "source": key.description,  # 活动来源（抽奖、扭蛋机、刮刮乐、老虎机）
+                "quota": float(key.quota) if key.quota else None
             }
             for key in keys
         ]
@@ -804,21 +803,14 @@ class LotteryService:
                     # 更新卡片记录实际发放的值
                     card.prize_value = prize_value
                 else:
-                    compensation = 100
-                    await PointsService.add_points(
-                        db=db,
-                        user_id=user_id,
-                        amount=compensation,
-                        reason=PointsReason.LOTTERY_WIN,
-                        description="兑换码库存不足补偿",
-                        auto_commit=False
-                    )
-                    prize_value = str(compensation)
-                    extra_message = f"兑换码已抽完，补偿{compensation}积分"
-                    # 更新卡片记录实际发放的值
-                    card.prize_type = PrizeType.POINTS.value
-                    card.prize_name = f"补偿积分 +{compensation}"
-                    card.prize_value = prize_value
+                    # API Key库存不足，仅提示用户
+                    prize_value = ""
+                    extra_message = "🎁 抱歉，API Key兑换码已被抽完！"
+                    # 更新卡片记录
+                    card.prize_type = PrizeType.EMPTY.value
+                    card.prize_name = "API Key（已发完）"
+                    card.prize_value = ""
+                    card.is_rare = False
 
             elif card.prize_type == PrizeType.POINTS.value:
                 points_amount = int(card.prize_value) if card.prize_value else 0

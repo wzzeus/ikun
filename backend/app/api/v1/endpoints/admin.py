@@ -975,21 +975,53 @@ async def batch_create_api_keys(
     items = request.items if request else []
 
     if not items:
-        return {"success": False, "message": "没有要创建的兑换码", "created": 0}
+        return {"success": False, "message": "没有要创建的兑换码", "created": 0, "skipped": 0, "errors": []}
+
+    # 提取所有要添加的 code
+    codes_to_add = [item.code for item in items]
+
+    # 检查数据库中已存在的 code
+    existing_result = await db.execute(
+        select(ApiKeyCode.code).where(ApiKeyCode.code.in_(codes_to_add))
+    )
+    existing_codes = set(row[0] for row in existing_result.fetchall())
 
     created = 0
-    for item in items:
-        key = ApiKeyCode(
-            code=item.code,
-            quota=Decimal(str(item.quota)),
-            description=item.description,
-            expires_at=item.expires_at
-        )
-        db.add(key)
-        created += 1
+    skipped = 0
+    errors = []
 
-    await db.commit()
-    return {"success": True, "created": created}
+    for item in items:
+        # 跳过已存在的
+        if item.code in existing_codes:
+            skipped += 1
+            errors.append(f"兑换码 {item.code[:8]}... 已存在")
+            continue
+
+        try:
+            key = ApiKeyCode(
+                code=item.code,
+                quota=Decimal(str(item.quota)),
+                description=item.description,
+                expires_at=item.expires_at
+            )
+            db.add(key)
+            created += 1
+            # 将新添加的 code 加入集合，防止同一批次内重复
+            existing_codes.add(item.code)
+        except Exception as e:
+            skipped += 1
+            errors.append(f"兑换码 {item.code[:8]}... 添加失败: {str(e)}")
+
+    if created > 0:
+        await db.commit()
+
+    return {
+        "success": created > 0,
+        "created": created,
+        "skipped": skipped,
+        "errors": errors[:10] if len(errors) > 10 else errors,  # 最多返回10条错误
+        "message": f"成功添加 {created} 个兑换码" + (f"，跳过 {skipped} 个重复" if skipped > 0 else "")
+    }
 
 
 @router.delete("/api-keys/{key_id}")

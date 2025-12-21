@@ -63,6 +63,15 @@ class _CacheEntry:
     last_error: Optional[str] = None
 
 
+@dataclass
+class _OnlineCacheEntry:
+    """在线状态缓存条目"""
+    value: bool
+    fresh_until: float
+    stale_until: float
+    last_error: Optional[str] = None
+
+
 class QuotaService:
     """
     额度查询服务
@@ -104,9 +113,16 @@ class QuotaService:
         self.usage_lookback_days = settings.QUOTA_USAGE_LOOKBACK_DAYS
         self.quota_per_usd = settings.QUOTA_PER_USD
 
+        # 在线状态配置
+        self.online_window_seconds = settings.ONLINE_STATUS_WINDOW_SECONDS
+        self.online_cache_ttl_ok = settings.ONLINE_STATUS_CACHE_TTL_OK_SECONDS
+        self.online_cache_ttl_stale = settings.ONLINE_STATUS_CACHE_TTL_STALE_SECONDS
+        self.online_cache_ttl_error = settings.ONLINE_STATUS_CACHE_TTL_ERROR_SECONDS
+
         # 内部状态
         self._cache: dict[str, _CacheEntry] = {}
         self._preferred_base_url: dict[str, str] = {}  # 记录每个 key 上次成功的 base_url
+        self._online_cache: dict[str, _OnlineCacheEntry] = {}  # 在线状态缓存
 
     @staticmethod
     def _normalize_url(url: str) -> str:
@@ -182,6 +198,65 @@ class QuotaService:
             # 失败：只设置短期缓存
             ttl = max(1, self.cache_ttl_error)
             self._cache[key_fp] = _CacheEntry(
+                value=value,
+                fresh_until=now + ttl,
+                stale_until=now + ttl,
+                last_error=last_error,
+            )
+
+    # ========== 在线状态缓存方法 ==========
+
+    def _online_cache_get(self, key_fp: str) -> _OnlineCacheEntry | object:
+        """从在线状态缓存获取结果"""
+        entry = self._online_cache.get(key_fp)
+        if entry is None:
+            return _MISSING
+
+        now = time.monotonic()
+        if now >= entry.stale_until:
+            self._online_cache.pop(key_fp, None)
+            return _MISSING
+
+        return entry
+
+    def _evict_oldest_online_cache(self) -> None:
+        """清理最旧的 10% 在线状态缓存条目"""
+        if not self._online_cache:
+            return
+        sorted_keys = sorted(
+            self._online_cache.keys(),
+            key=lambda k: self._online_cache[k].stale_until
+        )
+        to_remove = max(1, len(sorted_keys) // 10)
+        for key in sorted_keys[:to_remove]:
+            self._online_cache.pop(key, None)
+
+    def _online_cache_set(
+        self,
+        key_fp: str,
+        value: bool,
+        *,
+        ok: bool,
+        last_error: Optional[str] = None,
+    ) -> None:
+        """设置在线状态缓存"""
+        now = time.monotonic()
+
+        if len(self._online_cache) >= self.MAX_CACHE_ENTRIES:
+            self._evict_oldest_online_cache()
+
+        if ok:
+            fresh_ttl = max(1, self.online_cache_ttl_ok)
+            stale_ttl = fresh_ttl + max(1, self.online_cache_ttl_stale)
+            self._online_cache[key_fp] = _OnlineCacheEntry(
+                value=value,
+                fresh_until=now + fresh_ttl,
+                stale_until=now + stale_ttl,
+                last_error=None,
+            )
+        else:
+            ttl = max(1, self.online_cache_ttl_error)
+            self._online_cache[key_fp] = _OnlineCacheEntry(
                 value=value,
                 fresh_until=now + ttl,
                 stale_until=now + ttl,
@@ -611,6 +686,223 @@ class QuotaService:
                 quota_map[reg_id] = info
 
         return quota_map
+
+    # ========== 在线状态查询方法 ==========
+
+    async def _query_latest_log_ts(
+        self,
+        api_key: str,
+        *,
+        base_url: str,
+        client: httpx.AsyncClient
+    ) -> tuple[Optional[float], bool]:
+        """
+        查询该 key 最新一条日志的 created_at（Unix 秒）
+
+        Returns:
+            (latest_ts, ok)
+            - ok=False 表示请求/解析失败（可触发 stale 回退）
+            - ok=True 但 latest_ts=None 表示日志为空（视为离线）
+        """
+        url = f"{base_url}/api/log/token"
+        headers = {"Accept": "application/json"}
+        params = {
+            "key": api_key,
+            "p": 0,
+            "order": "desc",
+            "size": 1,  # 只需要最新一条
+        }
+
+        try:
+            resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code != 200:
+                logger.debug(
+                    "Online status log query non-200 (key=***%s, base_url=%s, status=%d)",
+                    api_key[-4:] if len(api_key) >= 4 else "****",
+                    base_url,
+                    resp.status_code
+                )
+                return None, False
+
+            data = resp.json()
+            logs = data.get("data")
+            if not data.get("success") or not isinstance(logs, list):
+                logger.debug(
+                    "Online status log query bad payload (key=***%s, base_url=%s, success=%s)",
+                    api_key[-4:] if len(api_key) >= 4 else "****",
+                    base_url,
+                    data.get("success")
+                )
+                return None, False
+
+            if not logs:
+                return None, True  # 无日志，视为离线
+
+            # 第三方 API 返回的日志是升序排列的（最旧在前，最新在后）
+            # order=desc 参数可能不生效，所以我们取最后若干条或遍历全部找最大值
+            latest_ts: Optional[float] = None
+
+            # 优先检查最后几条（通常是最新的）
+            check_range = logs[-50:] if len(logs) > 50 else logs
+            for log in check_range:
+                created_at = log.get("created_at")
+                if created_at is None:
+                    continue
+                try:
+                    ts = float(created_at)
+                except (TypeError, ValueError):
+                    continue
+                if latest_ts is None or ts > latest_ts:
+                    latest_ts = ts
+
+            return latest_ts, True
+        except Exception as e:
+            logger.debug("Query latest log timestamp failed: %s", e)
+            return None, False
+
+    async def get_online_status(
+        self,
+        api_key: str,
+        *,
+        window_seconds: Optional[int] = None,
+        client: Optional[httpx.AsyncClient] = None
+    ) -> bool:
+        """
+        获取单个 API Key 的在线状态
+
+        Args:
+            api_key: 用户的 API Key
+            window_seconds: 在线判定窗口（秒），默认使用配置值
+            client: 可复用的 HTTP 客户端
+
+        Returns:
+            True 表示在线（窗口内有调用），False 表示离线
+        """
+        if not api_key:
+            return False
+
+        window = int(window_seconds or self.online_window_seconds)
+        key_fp = self._fingerprint(api_key)
+        key_suffix = self._key_suffix(api_key)
+
+        # 检查缓存
+        cached = self._online_cache_get(key_fp)
+        if cached is not _MISSING:
+            entry = cached
+            now = time.monotonic()
+            if now < entry.fresh_until:
+                return entry.value
+
+        owns_client = client is None
+        if owns_client:
+            limits = httpx.Limits(
+                max_connections=self.max_concurrency,
+                max_keepalive_connections=self.max_concurrency
+            )
+            client = httpx.AsyncClient(
+                timeout=self.timeout,
+                limits=limits,
+                follow_redirects=False
+            )
+
+        try:
+            last_error: Optional[str] = None
+
+            for base_url in self.base_urls:
+                latest_ts, ok = await self._query_latest_log_ts(
+                    api_key, base_url=base_url, client=client
+                )
+                if not ok:
+                    last_error = "log_query_failed"
+                    continue
+
+                now_ts = time.time()
+                is_online = bool(
+                    latest_ts is not None and (now_ts - latest_ts) <= window
+                )
+                self._online_cache_set(key_fp, is_online, ok=True)
+                logger.debug(
+                    "Online status query success (key=***%s, is_online=%s, latest_ts=%s)",
+                    key_suffix, is_online, latest_ts
+                )
+                return is_online
+
+            # 全部失败：优先回退 stale
+            if cached is not _MISSING:
+                entry = cached
+                now = time.monotonic()
+                if now < entry.stale_until:
+                    logger.info(
+                        "Online status query failed, using stale cache (key=***%s, error=%s)",
+                        key_suffix, last_error or entry.last_error or "unknown"
+                    )
+                    return entry.value
+
+            self._online_cache_set(key_fp, False, ok=False, last_error=last_error)
+            return False
+        finally:
+            if owns_client and client is not None:
+                await client.aclose()
+
+    async def batch_get_online_status(
+        self,
+        api_keys: list[tuple[int, str]],
+        *,
+        window_seconds: Optional[int] = None
+    ) -> dict[int, bool]:
+        """
+        批量获取在线状态（避免 N+1 问题）
+
+        Args:
+            api_keys: [(registration_id, api_key), ...] 列表
+            window_seconds: 在线判定窗口（秒）
+
+        Returns:
+            {registration_id: bool} 字典
+        """
+        key_to_reg_ids: dict[str, list[int]] = {}
+        status_map: dict[int, bool] = {}
+
+        for reg_id, key in api_keys:
+            if not key:
+                status_map[reg_id] = False
+                continue
+            key_to_reg_ids.setdefault(key, []).append(reg_id)
+
+        if not key_to_reg_ids:
+            return status_map
+
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+        limits = httpx.Limits(
+            max_connections=self.max_concurrency,
+            max_keepalive_connections=self.max_concurrency
+        )
+
+        async with httpx.AsyncClient(
+            timeout=self.timeout,
+            limits=limits,
+            follow_redirects=False
+        ) as client:
+            async def query_key(key: str) -> tuple[str, bool]:
+                async with semaphore:
+                    return key, await self.get_online_status(
+                        key,
+                        window_seconds=window_seconds,
+                        client=client
+                    )
+
+            tasks = [query_key(key) for key in key_to_reg_ids.keys()]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning("Batch online status query exception: %s", result)
+                continue
+            key, is_online = result
+            for reg_id in key_to_reg_ids.get(key, []):
+                status_map[reg_id] = is_online
+
+        return status_map
 
 
 # 全局服务实例

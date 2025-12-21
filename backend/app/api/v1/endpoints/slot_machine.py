@@ -55,6 +55,7 @@ class SlotConfigResponse(BaseModel):
     remaining_today: Optional[int] = None
     balance: int = 0
     can_play: bool = False
+    slot_tickets: int = 0  # 老虎机券数量
 
 
 class MatchedRuleInfo(BaseModel):
@@ -64,6 +65,11 @@ class MatchedRuleInfo(BaseModel):
     rule_type: str
     multiplier: float
     matched_symbol: Optional[str] = None
+
+
+class SlotSpinRequest(BaseModel):
+    """抽奖请求"""
+    use_ticket: bool = False  # 是否使用老虎机券
 
 
 class SlotSpinResponse(BaseModel):
@@ -80,6 +86,8 @@ class SlotSpinResponse(BaseModel):
     matched_rules: List[MatchedRuleInfo] = []
     api_key_code: Optional[str] = None
     api_key_quota: Optional[float] = None
+    api_key_message: Optional[str] = None
+    used_ticket: bool = False  # 是否使用了券
 
 
 class SlotConfigUpdateRequest(BaseModel):
@@ -124,18 +132,24 @@ async def get_slot_config(
 
 @router.post("/spin", response_model=SlotSpinResponse)
 async def spin(
+    request: SlotSpinRequest = SlotSpinRequest(),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     执行老虎机抽奖
     - 需要登录
-    - 自动扣除积分
+    - 可选使用老虎机券（免费）
     - 返回结果由后端生成（按权重随机）
     """
     try:
         is_admin = current_user.role == "admin"
-        result = await SlotMachineService.spin(db=db, user_id=current_user.id, is_admin=is_admin)
+        result = await SlotMachineService.spin(
+            db=db,
+            user_id=current_user.id,
+            is_admin=is_admin,
+            use_ticket=request.use_ticket
+        )
         return SlotSpinResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -406,3 +420,55 @@ async def delete_slot_rule(
     await db.delete(rule)
     await db.commit()
     return {"success": True}
+
+
+# ==================== 管理员测试 API ====================
+
+class AdminTestDrawResponse(BaseModel):
+    """管理员测试抽奖响应"""
+    success: bool
+    prize_name: str
+    prize_type: str
+    api_key_code: Optional[str] = None
+    api_key_quota: Optional[float] = None
+    message: str
+
+
+@router.post("/admin/test-draw-apikey", response_model=AdminTestDrawResponse)
+async def admin_test_draw_apikey(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    管理员测试：强制抽中 API Key 兑换码
+    - 仅管理员可用
+    - 不消耗积分
+    - 直接分配一个可用的 API Key
+    """
+    require_admin(current_user)
+    user_id = current_user.id
+
+    try:
+        from app.services.lottery_service import LotteryService
+        api_key_info = await LotteryService._assign_api_key(db, user_id, "老虎机")
+
+        if api_key_info:
+            await db.commit()
+            return AdminTestDrawResponse(
+                success=True,
+                prize_name="API Key 兑换码",
+                prize_type="API_KEY",
+                api_key_code=api_key_info["code"],
+                api_key_quota=api_key_info["quota"],
+                message="测试成功！已分配 API Key 兑换码"
+            )
+        else:
+            return AdminTestDrawResponse(
+                success=False,
+                prize_name="API Key（已发完）",
+                prize_type="EMPTY",
+                message="API Key 库存不足，无法分配"
+            )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"测试失败: {str(e)}")

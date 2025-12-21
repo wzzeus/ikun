@@ -26,6 +26,7 @@ const itemIcons = {
   LOTTERY_TICKET: Ticket,
   SCRATCH_TICKET: Gift,
   GACHA_TICKET: Package,
+  SLOT_TICKET: Star,
   API_KEY: Key,
   ITEM: Star,
 }
@@ -53,6 +54,13 @@ const itemColors = {
     border: 'border-cyan-200 dark:border-cyan-800',
     ring: 'ring-cyan-500',
   },
+  SLOT_TICKET: {
+    bg: 'from-pink-500 to-rose-500',
+    light: 'bg-pink-50 dark:bg-pink-900/20',
+    text: 'text-pink-600 dark:text-pink-400',
+    border: 'border-pink-200 dark:border-pink-800',
+    ring: 'ring-pink-500',
+  },
   API_KEY: {
     bg: 'from-yellow-500 to-amber-500',
     light: 'bg-yellow-50 dark:bg-yellow-900/20',
@@ -67,6 +75,22 @@ const itemColors = {
     border: 'border-green-200 dark:border-green-800',
     ring: 'ring-green-500',
   },
+}
+
+// 券类型显示名称映射（简短版用于标签显示）
+const ticketLabels = {
+  LOTTERY_TICKET: '抽奖券',
+  SCRATCH_TICKET: '刮刮乐券',
+  GACHA_TICKET: '扭蛋券',
+  SLOT_TICKET: '老虎机券',
+}
+
+// 券类型简称映射（用于紧凑显示）
+const ticketShortLabels = {
+  LOTTERY_TICKET: '抽',
+  SCRATCH_TICKET: '刮',
+  GACHA_TICKET: '扭',
+  SLOT_TICKET: '机',
 }
 
 // 商品卡片组件
@@ -319,6 +343,7 @@ export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState([])
   const [userInfo, setUserInfo] = useState(null)
+  const [userTickets, setUserTickets] = useState({}) // 动态券数据
   const [exchanging, setExchanging] = useState(false)
   const [exchangeResult, setExchangeResult] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -330,12 +355,14 @@ export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [itemsData, infoData] = await Promise.all([
+      const [itemsData, infoData, ticketsData] = await Promise.all([
         exchangeApi.getItems(),
         exchangeApi.getInfo(),
+        exchangeApi.getTickets(),
       ])
       setItems(itemsData)
       setUserInfo(infoData)
+      setUserTickets(ticketsData || {})
     } catch (error) {
       console.error('加载积分商城失败:', error)
       toast.error('加载失败，请重试')
@@ -359,9 +386,13 @@ export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate
       setUserInfo((prev) => ({ ...prev, balance: result.balance }))
       onBalanceUpdate?.(result.balance)
       trackExchange(item.id, item.name, item.cost_points)
-      // 重新加载商品列表（更新库存）
-      const itemsData = await exchangeApi.getItems()
+      // 重新加载商品列表和券数据
+      const [itemsData, ticketsData] = await Promise.all([
+        exchangeApi.getItems(),
+        exchangeApi.getTickets(),
+      ])
       setItems(itemsData)
+      setUserTickets(ticketsData || {})
       // 通知父组件刷新券相关状态（让扭蛋机、刮刮乐等组件更新）
       onExchangeSuccess?.(item.item_type)
     } catch (error) {
@@ -409,29 +440,31 @@ export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* 我的券 */}
-          {userInfo && (userInfo.lottery_tickets > 0 || userInfo.scratch_tickets > 0 || userInfo.gacha_tickets > 0) && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs">
-              {userInfo.lottery_tickets > 0 && (
-                <span className="flex items-center gap-1 text-purple-600">
-                  <Ticket className="w-3 h-3" />
-                  {userInfo.lottery_tickets}
-                </span>
-              )}
-              {userInfo.scratch_tickets > 0 && (
-                <span className="flex items-center gap-1 text-orange-600">
-                  <Gift className="w-3 h-3" />
-                  {userInfo.scratch_tickets}
-                </span>
-              )}
-              {userInfo.gacha_tickets > 0 && (
-                <span className="flex items-center gap-1 text-cyan-600">
-                  <Package className="w-3 h-3" />
-                  {userInfo.gacha_tickets}
-                </span>
-              )}
-            </div>
-          )}
+          {/* 我的券 - 动态显示所有拥有的券 */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-50 to-cyan-50 dark:from-purple-900/20 dark:to-cyan-900/20 border border-purple-200/50 dark:border-purple-700/30 rounded-lg text-xs">
+            <Ticket className="w-3.5 h-3.5 text-purple-500" />
+            <span className="text-slate-600 dark:text-slate-300 font-medium">我的券</span>
+            {Object.keys(userTickets).length > 0 ? (
+              <span className="flex items-center gap-1.5 ml-1">
+                {Object.entries(userTickets).map(([type, count]) => {
+                  const colors = itemColors[type] || itemColors.ITEM
+                  const label = ticketLabels[type] || type.replace('_TICKET', '')
+                  const shortLabel = ticketShortLabels[type] || type.charAt(0)
+                  return (
+                    <span
+                      key={type}
+                      className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${count > 0 ? colors.light + ' ' + colors.text : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}
+                      title={`${label}: ${count}张`}
+                    >
+                      {shortLabel}{count}
+                    </span>
+                  )
+                })}
+              </span>
+            ) : (
+              <span className="text-slate-400 ml-1">暂无</span>
+            )}
+          </div>
           {/* 兑换记录 */}
           <button
             onClick={() => setShowHistory(true)}

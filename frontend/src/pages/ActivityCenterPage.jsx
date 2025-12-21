@@ -35,6 +35,8 @@ import {
   VolumeX,
   Music,
   SkipForward,
+  Play,
+  Pause,
 } from 'lucide-react'
 
 // 背景音乐列表
@@ -55,6 +57,12 @@ import BackpackModal from '../components/activity/BackpackModal'
 // 抽奖中奖庆祝弹窗组件
 function LotteryWinModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
   const [copied, setCopied] = useState(false)
+
+  // 检测是否是"已发完"的奖品（API Key 库存不足）
+  const prizeName = prize?.prize_name || ''
+  const prizeType = String(prize?.prize_type || '').toLowerCase()
+  const isOutOfStock = prizeName.includes('已发完')
+  const isEmptyPrize = prizeType === 'empty'
 
   // 奖品图标映射
   const getPrizeIcon = () => {
@@ -100,7 +108,7 @@ function LotteryWinModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
         setTimeout(() => oscillator.frequency.value = 784, 200)
         setTimeout(() => oscillator.frequency.value = 1047, 300)
         oscillator.stop(audioContext.currentTime + 0.6)
-      } else if (prize.prize_type !== 'EMPTY') {
+      } else if (!isEmptyPrize && !isOutOfStock) {
         oscillator.frequency.value = 523
         gainNode.gain.value = 0.15
         oscillator.start()
@@ -110,22 +118,42 @@ function LotteryWinModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
     } catch (e) {
       // 音频播放失败静默处理
     }
-  }, [prize])
+  }, [prize, isEmptyPrize, isOutOfStock])
 
-  if (prize.prize_type === 'EMPTY') {
+  // 处理"已发完"或"未中奖"的情况
+  if (isOutOfStock || isEmptyPrize) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
           <div className="relative p-4 sm:p-6 text-center">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-slate-600 rounded-full flex items-center justify-center">
-              <Gift className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
-            </div>
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很遗憾</h3>
-            <p className="text-sm sm:text-base text-slate-400 mb-4">本次抽奖未中奖</p>
+            {isOutOfStock ? (
+              <>
+                {/* API Key 已发完的友好提示 */}
+                <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-full flex items-center justify-center border border-amber-400/30">
+                  <Package className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很抱歉</h3>
+                <p className="text-sm sm:text-base text-slate-300 mb-2">
+                  今日 API Key 兑换码库存不足
+                </p>
+                <p className="text-xs text-slate-400 mb-4">
+                  感谢您的参与，请明日再来试试运气吧～
+                </p>
+              </>
+            ) : (
+              <>
+                {/* 普通未中奖 */}
+                <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-slate-600 rounded-full flex items-center justify-center">
+                  <Gift className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很遗憾</h3>
+                <p className="text-sm sm:text-base text-slate-400 mb-4">本次抽奖未中奖</p>
+              </>
+            )}
             <div className="flex gap-2 sm:gap-3">
               <button onClick={onClose} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
-                好的
+                {isOutOfStock ? '我知道了' : '好的'}
               </button>
               {canPlayAgain && (
                 <button onClick={onPlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
@@ -143,7 +171,7 @@ function LotteryWinModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-800 via-pink-800 to-rose-800'} rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-800 via-pink-800 to-rose-800'} rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
         {/* 装饰粒子 */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {[...Array(20)].map((_, i) => (
@@ -450,7 +478,7 @@ function SigninCalendar({ signinStatus, onSignin, signing }) {
 }
 
 // 抽奖转盘组件
-function LotteryWheel({ lotteryInfo, onDraw, drawing, lastPrize, isAdmin }) {
+function LotteryWheel({ lotteryInfo, onDraw, drawing, lastPrize, isAdmin, onTestDraw, testDrawing }) {
   const [showHelp, setShowHelp] = useState(false)
   const prizes = lotteryInfo?.prizes || []
   const tickets = lotteryInfo?.lottery_tickets || 0
@@ -594,6 +622,24 @@ function LotteryWheel({ lotteryInfo, onDraw, drawing, lastPrize, isAdmin }) {
       <p className="text-center text-xs text-slate-400 mt-3">
         10%概率获得稀有API Key兑换码
       </p>
+
+      {/* 管理员测试按钮 */}
+      {isAdmin && (
+        <button
+          onClick={onTestDraw}
+          disabled={testDrawing}
+          className="w-full mt-3 py-2 rounded-lg text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors flex items-center justify-center gap-2"
+        >
+          {testDrawing ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <>
+              <Key className="w-4 h-4" />
+              测试：直接抽中API Key
+            </>
+          )}
+        </button>
+      )}
     </div>
   )
 }
@@ -658,8 +704,25 @@ function PredictionCard({ market }) {
 // 背景音乐播放器组件
 function BgmPlayer() {
   const audioRef = useRef(null)
-  const [isPlaying, setIsPlaying] = useState(true) // 默认播放
-  const [currentTrack, setCurrentTrack] = useState(0)
+  // 从 localStorage 读取播放状态，默认打开
+  const [isPlaying, setIsPlaying] = useState(() => {
+    try {
+      const saved = localStorage.getItem('activity_bgm_playing')
+      // 如果没有保存过，默认打开；否则按保存的值
+      return saved === null ? true : saved === 'true'
+    } catch {
+      return true
+    }
+  })
+  // 从 localStorage 读取当前曲目
+  const [currentTrack, setCurrentTrack] = useState(() => {
+    try {
+      const saved = parseInt(localStorage.getItem('activity_bgm_track') || '0')
+      return isNaN(saved) ? 0 : saved % BGM_LIST.length
+    } catch {
+      return 0
+    }
+  })
   const [volume, setVolume] = useState(() => {
     try {
       return parseFloat(localStorage.getItem('activity_bgm_volume') || '0.3')
@@ -669,26 +732,101 @@ function BgmPlayer() {
   })
   const [showControls, setShowControls] = useState(false)
 
-  // 保存初始音量用于首次初始化
+  // 保存初始状态用于首次初始化
   const initialVolumeRef = useRef(volume)
+  const initialPlayingRef = useRef(isPlaying)
 
-  // 页面加载时自动播放
+  // 页面加载时根据保存的状态决定是否播放
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
     audio.volume = initialVolumeRef.current
-    // 尝试自动播放
-    const playPromise = audio.play()
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          setIsPlaying(true)
-        })
-        .catch(() => {
-          // 浏览器阻止自动播放，等待用户交互
-          setIsPlaying(false)
-        })
+
+    // 恢复播放进度
+    try {
+      const savedTime = parseFloat(localStorage.getItem('activity_bgm_time') || '0')
+      if (savedTime > 0 && !isNaN(savedTime)) {
+        audio.currentTime = savedTime
+      }
+    } catch {}
+
+    // 只有之前是播放状态才自动播放
+    if (initialPlayingRef.current) {
+      const playPromise = audio.play()
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true)
+          })
+          .catch(() => {
+            // 浏览器阻止自动播放，保持状态为 true，等待用户点击页面后播放
+            // 不修改 localStorage，让用户下次刷新还是会尝试自动播放
+            setIsPlaying(false)
+          })
+      }
+    }
+  }, [])
+
+  // 定期保存播放进度
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const saveProgress = () => {
+      if (!audio.paused) {
+        localStorage.setItem('activity_bgm_time', String(audio.currentTime))
+      }
+    }
+
+    // 每秒保存一次进度
+    const interval = setInterval(saveProgress, 1000)
+    // 页面关闭前保存
+    window.addEventListener('beforeunload', saveProgress)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('beforeunload', saveProgress)
+    }
+  }, [])
+
+  // 监听 audio 的 play/pause 事件来同步状态
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const handlePlay = () => setIsPlaying(true)
+    const handlePause = () => setIsPlaying(false)
+
+    audio.addEventListener('play', handlePlay)
+    audio.addEventListener('pause', handlePause)
+
+    return () => {
+      audio.removeEventListener('play', handlePlay)
+      audio.removeEventListener('pause', handlePause)
+    }
+  }, [])
+
+  // 监听用户首次交互后自动播放（如果之前被阻止）
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    // 如果用户设置是播放但实际没播放（被浏览器阻止），监听用户交互后自动播放
+    const handleUserInteraction = () => {
+      const shouldPlay = localStorage.getItem('activity_bgm_playing')
+      if ((shouldPlay === null || shouldPlay === 'true') && audio.paused) {
+        audio.play().catch(() => {})
+        // 状态会通过 play 事件自动同步
+      }
+    }
+
+    document.addEventListener('click', handleUserInteraction, { once: true })
+    document.addEventListener('keydown', handleUserInteraction, { once: true })
+
+    return () => {
+      document.removeEventListener('click', handleUserInteraction)
+      document.removeEventListener('keydown', handleUserInteraction)
     }
   }, [])
 
@@ -698,15 +836,22 @@ function BgmPlayer() {
     if (isPlaying) {
       audioRef.current.pause()
       setIsPlaying(false)
+      localStorage.setItem('activity_bgm_playing', 'false')
     } else {
       audioRef.current.play().catch(() => {})
       setIsPlaying(true)
+      localStorage.setItem('activity_bgm_playing', 'true')
     }
   }, [isPlaying])
 
   // 下一首
   const nextTrack = useCallback(() => {
-    setCurrentTrack((prev) => (prev + 1) % BGM_LIST.length)
+    setCurrentTrack((prev) => {
+      const next = (prev + 1) % BGM_LIST.length
+      localStorage.setItem('activity_bgm_track', String(next))
+      localStorage.setItem('activity_bgm_time', '0') // 重置播放进度
+      return next
+    })
   }, [])
 
   // 当切换歌曲时重新播放
@@ -737,12 +882,18 @@ function BgmPlayer() {
     if (!audio) return
 
     const handleEnded = () => {
-      nextTrack()
+      // 自动播放下一首
+      setCurrentTrack((prev) => {
+        const next = (prev + 1) % BGM_LIST.length
+        localStorage.setItem('activity_bgm_track', String(next))
+        localStorage.setItem('activity_bgm_time', '0') // 重置播放进度
+        return next
+      })
     }
 
     audio.addEventListener('ended', handleEnded)
     return () => audio.removeEventListener('ended', handleEnded)
-  }, [nextTrack])
+  }, [])
 
   return (
     <div className="fixed bottom-4 right-4 z-40">
@@ -781,8 +932,9 @@ function BgmPlayer() {
                   ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
                   : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-900/30'
               }`}
+              title={isPlaying ? '暂停' : '播放'}
             >
-              {isPlaying ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
             </button>
             <button
               onClick={nextTrack}
@@ -815,12 +967,16 @@ function BgmPlayer() {
         onClick={() => setShowControls(!showControls)}
         className={`p-3 rounded-full shadow-lg transition-all ${
           isPlaying
-            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white animate-pulse'
+            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-600'
         }`}
-        title={isPlaying ? '音乐播放中' : '播放背景音乐'}
+        title={isPlaying ? '音乐播放中（点击展开控制）' : '音乐已暂停（点击展开控制）'}
       >
-        <Music className="w-5 h-5" />
+        {isPlaying ? (
+          <Music className="w-5 h-5 animate-pulse" />
+        ) : (
+          <VolumeX className="w-5 h-5" />
+        )}
       </button>
     </div>
   )
@@ -858,6 +1014,7 @@ export default function ActivityCenterPage() {
   const [drawing, setDrawing] = useState(false)
   const [lastPrize, setLastPrize] = useState(null)
   const [showLotteryWinModal, setShowLotteryWinModal] = useState(false)
+  const [testDrawing, setTestDrawing] = useState(false) // 管理员测试抽奖状态
 
   // 背包数据
   const [itemsLoading, setItemsLoading] = useState(true)
@@ -1057,6 +1214,34 @@ export default function ActivityCenterPage() {
     }, 100)
   }
 
+  // 管理员测试：直接抽中 API Key
+  const handleTestDraw = async () => {
+    if (!isAdmin || testDrawing) return
+    setTestDrawing(true)
+    try {
+      const result = await lotteryApi.adminTestDrawApiKey()
+      if (result.success) {
+        // 构造一个和普通抽奖类似的奖品对象
+        setLastPrize({
+          prize_name: result.prize_name,
+          prize_type: result.prize_type,
+          api_key_code: result.api_key_code,
+          is_rare: true,
+        })
+        setShowLotteryWinModal(true)
+        toast.success(`测试成功！${result.message}`)
+        // 刷新背包
+        loadItems()
+      } else {
+        toast.warning(result.message || 'API Key 库存不足')
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '测试失败')
+    } finally {
+      setTestDrawing(false)
+    }
+  }
+
   // 兑换成功后刷新游戏券状态
   const handleExchangeSuccess = useCallback((itemType) => {
     // 触发所有游戏组件刷新
@@ -1154,6 +1339,8 @@ export default function ActivityCenterPage() {
               drawing={drawing}
               lastPrize={lastPrize}
               isAdmin={isAdmin}
+              onTestDraw={handleTestDraw}
+              testDrawing={testDrawing}
             />
           )}
 

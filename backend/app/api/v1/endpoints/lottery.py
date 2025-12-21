@@ -95,6 +95,8 @@ class ApiKeyInfo(BaseModel):
     status: str
     assigned_at: Optional[str] = None
     expires_at: Optional[str] = None
+    source: Optional[str] = None  # 活动来源（抽奖、扭蛋机、刮刮乐、老虎机）
+    quota: Optional[float] = None  # 额度
 
 
 # ========== 抽奖接口 ==========
@@ -432,3 +434,101 @@ async def claim_easter_egg(
         logger.error(f"彩蛋领取异常: user_id={user_id}, error={str(e)}")
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
+
+
+# ========== 管理员测试接口 ==========
+
+class AdminTestDrawResponse(BaseModel):
+    """管理员测试抽奖响应"""
+    success: bool
+    prize_name: str
+    prize_type: str
+    api_key_code: Optional[str] = None
+    api_key_quota: Optional[float] = None
+    message: str
+
+
+@router.post("/admin/test-draw-apikey", response_model=AdminTestDrawResponse)
+async def admin_test_draw_apikey(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    管理员测试：强制抽中 API Key 兑换码
+    - 仅管理员可用
+    - 不消耗积分
+    - 直接分配一个可用的 API Key
+    """
+    # 检查管理员权限
+    real_role = current_user.original_role or current_user.role
+    if real_role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    user_id = current_user.id
+
+    try:
+        # 直接调用 API Key 分配逻辑
+        api_key_info = await LotteryService._assign_api_key(db, user_id, "抽奖")
+
+        if api_key_info:
+            await db.commit()
+            return AdminTestDrawResponse(
+                success=True,
+                prize_name="API Key 兑换码",
+                prize_type="API_KEY",
+                api_key_code=api_key_info["code"],
+                api_key_quota=api_key_info["quota"],
+                message="测试成功！已分配 API Key 兑换码"
+            )
+        else:
+            return AdminTestDrawResponse(
+                success=False,
+                prize_name="API Key（已发完）",
+                prize_type="EMPTY",
+                message="API Key 库存不足，无法分配"
+            )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"测试失败: {str(e)}")
+
+
+@router.post("/scratch/admin/test-draw-apikey", response_model=AdminTestDrawResponse)
+async def admin_test_scratch_draw_apikey(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    管理员测试（刮刮乐）：强制抽中 API Key 兑换码
+    - 仅管理员可用
+    - 不消耗积分
+    - 直接从刮刮乐库存分配一个可用的 API Key
+    """
+    real_role = current_user.original_role or current_user.role
+    if real_role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    user_id = current_user.id
+
+    try:
+        api_key_info = await LotteryService._assign_api_key(db, user_id, "刮刮乐")
+
+        if api_key_info:
+            await db.commit()
+            return AdminTestDrawResponse(
+                success=True,
+                prize_name="API Key 兑换码",
+                prize_type="API_KEY",
+                api_key_code=api_key_info["code"],
+                api_key_quota=api_key_info["quota"],
+                message="测试成功！已分配 API Key 兑换码"
+            )
+        else:
+            return AdminTestDrawResponse(
+                success=False,
+                prize_name="API Key（已发完）",
+                prize_type="EMPTY",
+                message="API Key 库存不足，无法分配"
+            )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"测试失败: {str(e)}")

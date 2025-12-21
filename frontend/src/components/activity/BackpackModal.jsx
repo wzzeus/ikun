@@ -268,52 +268,77 @@ export default function BackpackModal({ items, loading, onClose }) {
                 </div>
               ) : (
                 <>
-                  {apiKeys.map((key, index) => (
-                    <div
-                      key={key.id}
-                      className="group relative bg-white dark:bg-[#14161a] border border-slate-200 dark:border-white/5 rounded-xl p-4 hover:border-amber-500/30 dark:hover:border-amber-500/20 transition-all duration-300 shadow-sm dark:shadow-none"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                            KEY #{String(index + 1).padStart(2, '0')}
-                          </span>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            key.status === 'ASSIGNED' ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]' : 'bg-slate-400 dark:bg-slate-600'
-                          }`} />
-                        </div>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                          {formatDate(key.assigned_at)}
-                        </span>
-                      </div>
-                      
-                      {/* 代码区域 - 终端风格/卡片风格 */}
-                      <div className="relative flex items-center gap-2 mb-3">
-                        <div className="flex-1 bg-slate-50 dark:bg-black/50 rounded-lg border border-slate-200 dark:border-white/5 px-3 py-2.5 font-mono text-sm text-slate-700 dark:text-amber-500/90 break-all select-all shadow-inner group-hover:border-amber-500/20 dark:group-hover:border-amber-500/10 transition-colors">
-                          {key.code}
-                        </div>
-                        <button
-                          onClick={() => handleCopyCode(key.code, key.id)}
-                          className={`flex-shrink-0 p-2.5 rounded-lg border transition-all duration-200 ${
-                            copiedId === key.id
-                              ? 'bg-emerald-50/50 border-emerald-200 text-emerald-600 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-500'
-                              : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white'
-                          }`}
-                        >
-                          {copiedId === key.id ? (
-                            <CheckCircle className="w-4 h-4" />
-                          ) : (
-                            <Copy className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
+                  {apiKeys.map((key, index) => {
+                    // 活动来源图标和颜色映射
+                    const sourceConfig = {
+                      '抽奖': { icon: '🎰', color: 'text-purple-500 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10' },
+                      '扭蛋机': { icon: '🎁', color: 'text-pink-500 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-500/10' },
+                      '刮刮乐': { icon: '🎫', color: 'text-green-500 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-500/10' },
+                      '老虎机': { icon: '🎲', color: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/10' },
+                    }
+                    const source = sourceConfig[key.source] || { icon: '🔑', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10' }
 
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-500">
-                        <Shield className="w-3 h-3" />
-                        <span>一次性凭证，请勿泄露给他人</span>
+                    return (
+                      <div
+                        key={key.id}
+                        className="group relative bg-white dark:bg-[#14161a] border border-slate-200 dark:border-white/5 rounded-xl p-4 hover:border-amber-500/30 dark:hover:border-amber-500/20 transition-all duration-300 shadow-sm dark:shadow-none"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                              KEY #{String(index + 1).padStart(2, '0')}
+                            </span>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              key.status === 'ASSIGNED' ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]' : 'bg-slate-400 dark:bg-slate-600'
+                            }`} />
+                            {/* 活动来源标签 */}
+                            {key.source && (
+                              <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${source.bg} ${source.color}`}>
+                                {source.icon} {key.source}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                            {formatDate(key.assigned_at)}
+                          </span>
+                        </div>
+
+                        {/* 代码区域 - 终端风格/卡片风格 */}
+                        <div className="relative flex items-center gap-2 mb-3">
+                          <div className="flex-1 bg-slate-50 dark:bg-black/50 rounded-lg border border-slate-200 dark:border-white/5 px-3 py-2.5 font-mono text-sm text-slate-700 dark:text-amber-500/90 break-all select-all shadow-inner group-hover:border-amber-500/20 dark:group-hover:border-amber-500/10 transition-colors">
+                            {key.code}
+                          </div>
+                          <button
+                            onClick={() => handleCopyCode(key.code, key.id)}
+                            className={`flex-shrink-0 p-2.5 rounded-lg border transition-all duration-200 ${
+                              copiedId === key.id
+                                ? 'bg-emerald-50/50 border-emerald-200 text-emerald-600 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-500'
+                                : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white'
+                            }`}
+                          >
+                            {copiedId === key.id ? (
+                              <CheckCircle className="w-4 h-4" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-500">
+                            <Shield className="w-3 h-3" />
+                            <span>一次性凭证，请勿泄露给他人</span>
+                          </div>
+                          {/* 额度显示 */}
+                          {key.quota > 0 && (
+                            <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                              额度: ${key.quota}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   
                   <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-500/5 border border-amber-100 dark:border-amber-500/10 flex items-center gap-3">
                     <Info className="w-4 h-4 text-amber-500/70 dark:text-amber-500/50" />

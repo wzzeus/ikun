@@ -315,6 +315,7 @@ class ExchangeItemType(str, enum.Enum):
     LOTTERY_TICKET = "LOTTERY_TICKET"      # 抽奖券（免费抽奖次数）
     SCRATCH_TICKET = "SCRATCH_TICKET"      # 刮刮乐券
     GACHA_TICKET = "GACHA_TICKET"          # 扭蛋券
+    SLOT_TICKET = "SLOT_TICKET"            # 老虎机券
     API_KEY = "API_KEY"                    # API Key 兑换码
     ITEM = "ITEM"                          # 道具
 

@@ -339,20 +339,27 @@ class SlotMachineService:
         """获取公开配置（用户端）"""
         config = await SlotMachineService.get_active_config(db)
         if not config:
-            return {"active": False, "config": None, "symbols": []}
+            return {"active": False, "config": None, "symbols": [], "slot_tickets": 0}
 
         symbols = await SlotMachineService.get_enabled_symbols(db, config.id, include_disabled=False)
 
-        # 获取用户今日次数和余额
+        # 获取用户今日次数、余额和老虎机券
         today_count = 0
         balance = 0
+        slot_tickets = 0
         if user_id:
             today_count = await SlotMachineService.get_today_count(db, user_id, config.id)
             balance = await PointsService.get_balance(db, user_id)
+            # 获取老虎机券数量
+            from app.services.exchange_service import ExchangeService
+            tickets = await ExchangeService.get_user_tickets(db, user_id)
+            slot_tickets = tickets.get("SLOT_TICKET", 0)
 
         daily_limit = config.daily_limit
         remaining = daily_limit - today_count if daily_limit else None
-        can_play = balance >= config.cost_points and (daily_limit is None or remaining > 0)
+        # 有券或有足够积分都可以玩
+        can_play_with_points = balance >= config.cost_points and (daily_limit is None or remaining > 0)
+        can_play = slot_tickets > 0 or can_play_with_points
 
         return {
             "active": True,
@@ -383,6 +390,7 @@ class SlotMachineService:
             "remaining_today": remaining,
             "balance": balance,
             "can_play": can_play,
+            "slot_tickets": slot_tickets,
         }
 
     @staticmethod
@@ -390,25 +398,28 @@ class SlotMachineService:
         db: AsyncSession,
         user_id: int,
         request_id: Optional[str] = None,
-        is_admin: bool = False
+        is_admin: bool = False,
+        use_ticket: bool = False
     ) -> Dict[str, Any]:
         """
         执行老虎机抽奖
         - 后端生成随机结果（按权重）
         - 使用数据库规则计算中奖
-        - 扣除积分
+        - 扣除积分（或使用券）
         - 发放奖励（或扣除惩罚）
         - 记录抽奖日志
 
         Args:
             is_admin: 是否是管理员（管理员不受日限限制）
+            use_ticket: 是否使用老虎机券
         """
         config = await SlotMachineService.get_active_config(db)
         if not config:
             raise ValueError("老虎机未启用")
 
-        # 检查日限（管理员不受限制）
-        if config.daily_limit and not is_admin:
+        # 检查日限（管理员不受限制，使用券不计入日限）
+        used_ticket = False
+        if config.daily_limit and not is_admin and not use_ticket:
             today_count = await SlotMachineService.get_today_count(db, user_id, config.id)
             if today_count >= config.daily_limit:
                 raise ValueError(f"今日次数已用完（{today_count}/{config.daily_limit}）")
@@ -423,18 +434,28 @@ class SlotMachineService:
         cost = int(config.cost_points)
         reels_count = int(config.reels or 3)
 
-        # 扣除积分（使用行锁防并发）
-        try:
-            await PointsService.deduct_points(
-                db=db,
-                user_id=user_id,
-                amount=cost,
-                reason=PointsReason.LOTTERY_SPEND,
-                description="老虎机消费",
-                auto_commit=False,
-            )
-        except ValueError as e:
-            raise ValueError(str(e))
+        # 尝试使用券或扣除积分
+        if use_ticket:
+            from app.services.exchange_service import ExchangeService
+            ticket_used = await ExchangeService.use_ticket(db, user_id, "SLOT_TICKET")
+            if ticket_used:
+                used_ticket = True
+                cost = 0  # 使用券免费
+            else:
+                raise ValueError("没有可用的老虎机券")
+        else:
+            # 扣除积分（使用行锁防并发）
+            try:
+                await PointsService.deduct_points(
+                    db=db,
+                    user_id=user_id,
+                    amount=cost,
+                    reason=PointsReason.LOTTERY_SPEND,
+                    description="老虎机消费",
+                    auto_commit=False,
+                )
+            except ValueError as e:
+                raise ValueError(str(e))
 
         # 按权重随机生成每个滚轴的结果
         reels = [SlotMachineService.weighted_random_pick(symbols) for _ in range(reels_count)]
@@ -452,12 +473,17 @@ class SlotMachineService:
         # 大奖尝试额外发放 API Key（从 api_key_codes.description="彩蛋" 分配）
         api_key_code = None
         api_key_quota = None
+        api_key_message = None  # API Key 发放结果消息
         if is_jackpot:
             from app.services.lottery_service import LotteryService
             api_key_info = await LotteryService._assign_api_key(db, user_id, "彩蛋")
             if api_key_info:
                 api_key_code = api_key_info["code"]
                 api_key_quota = api_key_info["quota"]
+                api_key_message = f"🎁 额外获得API Key兑换码！"
+            else:
+                # API Key 库存不足，仅提示用户
+                api_key_message = f"🎁 抱歉，API Key兑换码已被抽完！"
 
         # 发放奖励或扣除惩罚
         if payout > 0:
@@ -518,6 +544,8 @@ class SlotMachineService:
             "matched_rules": matched_rules,
             "api_key_code": api_key_code,
             "api_key_quota": api_key_quota,
+            "api_key_message": api_key_message,
+            "used_ticket": used_ticket,
         }
 
     # ==================== 管理员方法 ====================

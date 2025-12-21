@@ -3,8 +3,9 @@
  * 消耗积分随机获得积分/道具奖励
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Gift, Coins, Sparkles, Loader2, Star, Heart, Coffee, Zap, Pizza, HelpCircle, Ticket, Award, Key, Copy, Check } from 'lucide-react'
+import { Gift, Coins, Sparkles, Loader2, Star, Heart, Coffee, Zap, Pizza, HelpCircle, Ticket, Award, Key, Copy, Check, Package, RefreshCw, X } from 'lucide-react'
 import api from '../../services/api'
+import { gachaApi } from '../../services'
 import { useToast } from '../Toast'
 import { trackLottery } from '../../utils/analytics'
 import GameHelpModal, { HelpButton } from './GameHelpModal'
@@ -264,6 +265,7 @@ export default function GachaMachine({ onBalanceUpdate, externalBalance, userRol
   const [showHelp, setShowHelp] = useState(false)
   const [copied, setCopied] = useState(false)
   const copyTimeoutRef = useRef(null)
+  const [testDrawing, setTestDrawing] = useState(false) // 管理员测试抽奖状态
 
   // 复制兑换码
   const copyApiKeyCode = async () => {
@@ -466,6 +468,34 @@ export default function GachaMachine({ onBalanceUpdate, externalBalance, userRol
       copyTimeoutRef.current = null
     }
     handlePlay()
+  }
+
+  // 管理员测试：直接抽中 API Key
+  const handleTestDraw = async () => {
+    if (!isAdmin || testDrawing) return
+    setTestDrawing(true)
+    try {
+      const result = await gachaApi.adminTestDrawApiKey()
+      if (result.success) {
+        // 构造一个和普通抽奖类似的奖品对象并显示
+        setResult({
+          prize_type: 'api_key',
+          prize_name: result.prize_name,
+          prize_value: { code: result.api_key_code, quota: result.api_key_quota },
+          is_rare: true,
+          remaining_balance: status?.user_balance || 0,
+        })
+        setShowResult(true)
+        playWinSound()
+        toast.success(`测试成功！${result.message}`)
+      } else {
+        toast.warning(result.message || 'API Key 库存不足')
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '测试失败')
+    } finally {
+      setTestDrawing(false)
+    }
   }
 
   if (loading) {
@@ -721,103 +751,181 @@ export default function GachaMachine({ onBalanceUpdate, externalBalance, userRol
         每次扭蛋随机获得积分或道具奖励，奖励即时到账
       </p>
 
-      {/* 结果弹窗 */}
-      {showResult && result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCloseResult} />
-          <div className={`relative bg-gradient-to-br ${result.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-900 via-indigo-900 to-blue-900'} rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border ${result.is_rare ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
-            {/* 装饰粒子 */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              {[...Array(15)].map((_, i) => (
-                <div
-                  key={i}
-                  className={`absolute w-1.5 h-1.5 ${result.is_rare ? 'bg-yellow-300' : 'bg-yellow-400'} rounded-full animate-ping`}
-                  style={{
-                    left: `${Math.random() * 100}%`,
-                    top: `${Math.random() * 100}%`,
-                    animationDelay: `${Math.random() * 2}s`,
-                    animationDuration: `${1 + Math.random()}s`,
-                  }}
-                />
-              ))}
-            </div>
-
-            <div className="relative p-4 sm:p-6 text-center">
-              {/* 奖励图标 */}
-              <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 sm:mb-4">
-                <div className={`absolute inset-0 bg-gradient-to-br ${result.is_rare ? 'from-yellow-400 to-orange-500' : 'from-purple-400 to-indigo-500'} rounded-full shadow-2xl animate-pulse`}>
-                  <div className="absolute top-2 sm:top-3 left-3 sm:left-4 w-5 sm:w-6 h-5 sm:h-6 bg-white/30 rounded-full" />
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {(() => {
-                    const Icon = getRewardIcon(result.prize_type, result.prize_value)
-                    return <Icon className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-                  })()}
-                </div>
-              </div>
-
-              <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
-                {result.is_rare ? '大奖！' : '恭喜获得！'}
-              </h3>
-
-              {/* 奖励展示 */}
-              <div className="bg-white/10 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
-                <div className={`text-lg sm:text-2xl font-bold ${result.is_rare ? 'text-yellow-300' : 'text-yellow-300'}`}>
-                  {getRewardDescription(result.prize_type, result.prize_value, result.prize_name)}
-                </div>
-                <p className="text-purple-200 text-xs sm:text-sm mt-1">奖励已发放到您的账户</p>
-              </div>
-
-              {/* API Key 兑换码显示区 */}
-              {result.prize_type === 'api_key' && result.prize_value?.code && (
-                <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4 border border-yellow-400/30">
-                  <p className="text-xs text-yellow-400/80 mb-2">🎉 兑换码（请妥善保存）</p>
-                  <div className="flex items-center gap-2 bg-black/30 rounded-lg p-2">
-                    <code className="flex-1 text-yellow-300 text-sm font-mono break-all select-all">
-                      {result.prize_value.code}
-                    </code>
-                    <button
-                      onClick={copyApiKeyCode}
-                      className="p-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-lg transition-colors"
-                      title={copied ? '已复制' : '复制兑换码'}
-                    >
-                      {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-yellow-400" />}
-                    </button>
-                  </div>
-                  {result.prize_value.quota > 0 && (
-                    <p className="text-xs text-yellow-400/60 mt-2">额度：${result.prize_value.quota}</p>
-                  )}
-                  <p className="text-xs text-white/50 mt-2">可在背包中随时查看已获得的兑换码</p>
-                </div>
-              )}
-
-              {/* 剩余积分 */}
-              <div className="bg-black/20 rounded-lg px-3 sm:px-4 py-2 mb-3 sm:mb-4">
-                <p className="text-xs text-purple-300">剩余积分</p>
-                <p className="font-bold text-white text-base sm:text-lg">{result.remaining_balance}</p>
-              </div>
-
-              {/* 按钮 */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCloseResult}
-                  className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
-                >
-                  好的
-                </button>
-                {status?.can_play && result.remaining_balance >= status?.cost && (
-                  <button
-                    onClick={handlePlayAgain}
-                    className="flex-1 py-2.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all"
-                  >
-                    再来一次
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* 管理员测试按钮 */}
+      {isAdmin && (
+        <button
+          onClick={handleTestDraw}
+          disabled={testDrawing}
+          className="w-full mt-3 py-2 rounded-lg text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors flex items-center justify-center gap-2"
+        >
+          {testDrawing ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <>
+              <Key className="w-4 h-4" />
+              测试：直接抽中API Key
+            </>
+          )}
+        </button>
       )}
+
+      {/* 结果弹窗 */}
+      {showResult && result && (() => {
+        // 检测是否是 API Key 已发完的情况
+        const prizeType = String(result.prize_type || '').toLowerCase()
+        const isApiKeyOutOfStock = result.prize_name?.includes('已发完') ||
+          (prizeType === 'empty' && result.prize_value?.message?.includes('抽完'))
+
+        // API Key 已发完 - 显示友好提示
+        if (isApiKeyOutOfStock) {
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCloseResult} />
+              <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
+                <div className="relative p-4 sm:p-6 text-center">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-full flex items-center justify-center border border-amber-400/30">
+                    <Package className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很抱歉</h3>
+                  <p className="text-sm sm:text-base text-slate-300 mb-2">
+                    今日 API Key 兑换码库存不足
+                  </p>
+                  <p className="text-xs text-slate-400 mb-4">
+                    感谢您的参与，请明日再来试试运气吧～
+                  </p>
+
+                  {/* 剩余积分 */}
+                  <div className="bg-black/20 rounded-lg px-3 sm:px-4 py-2 mb-3 sm:mb-4">
+                    <p className="text-xs text-slate-400">剩余积分</p>
+                    <p className="font-bold text-white text-base sm:text-lg">{result.remaining_balance}</p>
+                  </div>
+
+                  <div className="flex gap-2 sm:gap-3">
+                    <button onClick={handleCloseResult} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+                      我知道了
+                    </button>
+                    {status?.can_play && result.remaining_balance >= status?.cost && (
+                      <button onClick={handlePlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+                        再来一次
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <style>{`@keyframes scaleIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }`}</style>
+            </div>
+          )
+        }
+
+        // 正常中奖弹窗 - 与抽奖组件统一样式
+        const isApiKeyPrize = result.prize_type === 'api_key' && result.prize_value?.code
+        // 测试模式：积分未变化但有兑换码（管理员测试抽奖）
+        const isTestMode = result.remaining_balance === (status?.user_balance || 0) && isApiKeyPrize
+        // API Key 或稀有奖品使用黄橙色主题
+        const isRareTheme = result.is_rare || isApiKeyPrize
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCloseResult} />
+            <div className={`relative bg-gradient-to-br ${isRareTheme ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-800 via-pink-800 to-rose-800'} rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border ${isRareTheme ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+              {/* 装饰粒子 */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                {[...Array(20)].map((_, i) => (
+                  <div
+                    key={i}
+                    className={`absolute w-1.5 h-1.5 sm:w-2 sm:h-2 ${isRareTheme ? 'bg-yellow-300' : 'bg-purple-300'} rounded-full animate-ping`}
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      top: `${Math.random() * 100}%`,
+                      animationDelay: `${Math.random() * 2}s`,
+                      animationDuration: `${1 + Math.random()}s`,
+                    }}
+                  />
+                ))}
+              </div>
+
+              <div className="relative p-4 sm:p-6 text-center">
+                {/* 关闭按钮 */}
+                <button onClick={handleCloseResult} className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                  <X className="w-4 h-4 sm:w-5 sm:h-5 text-white/70" />
+                </button>
+
+                {/* 奖励图标 */}
+                <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 sm:mb-4">
+                  <div className={`absolute inset-0 bg-gradient-to-br ${isRareTheme ? 'from-yellow-400 to-orange-500' : 'from-purple-400 to-pink-500'} rounded-full shadow-2xl ${isRareTheme ? 'animate-pulse' : ''}`}>
+                    <div className="absolute top-2 sm:top-3 left-3 sm:left-4 w-5 sm:w-6 h-5 sm:h-6 bg-white/30 rounded-full" />
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {(() => {
+                      const Icon = getRewardIcon(result.prize_type, result.prize_value)
+                      return <Icon className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+                    })()}
+                  </div>
+                </div>
+
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+                  {isRareTheme ? '大奖来袭！' : '恭喜中奖！'}
+                </h3>
+
+                {/* 奖励展示 */}
+                <div className="bg-white/10 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
+                  <div className={`text-lg sm:text-2xl font-bold ${isRareTheme ? 'text-yellow-300' : 'text-purple-200'}`}>
+                    {isApiKeyPrize ? 'API Key 兑换码' : getRewardDescription(result.prize_type, result.prize_value, result.prize_name)}
+                  </div>
+                  {isRareTheme && (
+                    <div className="flex items-center justify-center gap-1 mt-2 text-yellow-400">
+                      <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                      <span className="text-xs sm:text-sm font-medium">稀有奖品</span>
+                      <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                    </div>
+                  )}
+
+                  {/* API Key 兑换码显示区 */}
+                  {isApiKeyPrize && (
+                    <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-black/30 rounded-lg">
+                      <p className="text-xs text-yellow-400/80 mb-1 sm:mb-2">兑换码（请妥善保存）</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-black/40 px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm text-yellow-300 font-mono break-all select-all">
+                          {result.prize_value.code}
+                        </code>
+                        <button
+                          onClick={copyApiKeyCode}
+                          className={`p-1.5 sm:p-2 rounded-lg transition-all ${
+                            copied
+                              ? 'bg-green-500/30 text-green-300'
+                              : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
+                          }`}
+                          title={copied ? '已复制' : '复制兑换码'}
+                        >
+                          {copied ? <Check className="w-4 h-4 sm:w-5 sm:h-5" /> : <Copy className="w-4 h-4 sm:w-5 sm:h-5" />}
+                        </button>
+                      </div>
+                      {result.prize_value.quota > 0 && (
+                        <p className="text-xs text-yellow-400/60 mt-1 sm:mt-2">额度：${result.prize_value.quota}</p>
+                      )}
+                      <p className="text-xs text-white/50 mt-1 sm:mt-2">可在背包中随时查看已获得的兑换码</p>
+                    </div>
+                  )}
+
+                  <p className="text-purple-200 text-xs sm:text-sm mt-2">奖励已发放到您的账户</p>
+                </div>
+
+                {/* 按钮 */}
+                <div className="flex gap-2 sm:gap-3">
+                  <button onClick={handleCloseResult} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+                    好的
+                  </button>
+                  {!isTestMode && status?.can_play && result.remaining_balance >= status?.cost && (
+                    <button onClick={handlePlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+                      再来一次
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <style>{`@keyframes scaleIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }`}</style>
+          </div>
+        )
+      })()}
 
       {/* CSS 动画 */}
       <style>{`

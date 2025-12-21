@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     QUOTA_USAGE_LOOKBACK_DAYS: int = 90  # OpenAI usage 查询天数
     QUOTA_PER_USD: int = 500000  # NewAPI 额度换算比率
 
+    # 选手在线状态配置（基于 API 调用日志）
+    ONLINE_STATUS_WINDOW_SECONDS: int = 300  # 5 分钟内有调用视为在线
+    ONLINE_STATUS_CACHE_TTL_OK_SECONDS: int = 30  # 成功结果缓存（短期）
+    ONLINE_STATUS_CACHE_TTL_STALE_SECONDS: int = 60  # stale-while-revalidate 窗口
+    ONLINE_STATUS_CACHE_TTL_ERROR_SECONDS: int = 10  # 失败缓存（更短）
+
     class Config:
         env_file = ".env"
         case_sensitive = True

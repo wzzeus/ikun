@@ -3,7 +3,7 @@
  * 使用 Canvas 实现刮刮乐效果
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Ticket, Sparkles, Gift, RefreshCw, Coins, Star, AlertCircle, Key, Heart, Coffee, Zap, Pizza, X, HelpCircle, Copy, CheckCircle } from 'lucide-react'
+import { Ticket, Sparkles, Gift, RefreshCw, Coins, Star, AlertCircle, Key, Heart, Coffee, Zap, Pizza, X, HelpCircle, Copy, CheckCircle, Package } from 'lucide-react'
 import { lotteryApi } from '../../services'
 import { useToast } from '../Toast'
 import { trackLottery } from '../../utils/analytics'
@@ -12,6 +12,12 @@ import GameHelpModal, { HelpButton } from './GameHelpModal'
 // 中奖庆祝弹窗组件
 function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
   const [copied, setCopied] = useState(false)
+
+  // 检测是否是 API Key 库存不足的情况
+  const prizeName = prize?.prize_name || ''
+  const prizeType = String(prize?.prize_type || '').toLowerCase()
+  const isOutOfStock = prizeName.includes('已发完')
+  const isEmptyPrize = prizeType === 'empty'
 
   // 奖品图标映射
   const getPrizeIcon = () => {
@@ -58,7 +64,7 @@ function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
         setTimeout(() => oscillator.frequency.value = 784, 200)
         setTimeout(() => oscillator.frequency.value = 1047, 300)
         oscillator.stop(audioContext.currentTime + 0.6)
-      } else if (prize.prize_type !== 'EMPTY') {
+      } else if (!isEmptyPrize && !isOutOfStock) {
         // 普通奖励音效
         oscillator.frequency.value = 523
         gainNode.gain.value = 0.15
@@ -69,22 +75,42 @@ function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
     } catch (e) {
       // 音频播放失败静默处理
     }
-  }, [prize])
+  }, [prize, isEmptyPrize, isOutOfStock])
 
-  if (prize.prize_type === 'EMPTY') {
+  // 处理"已发完"或"未中奖"的情况
+  if (isOutOfStock || isEmptyPrize) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
           <div className="relative p-4 sm:p-6 text-center">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-slate-600 rounded-full flex items-center justify-center">
-              <Gift className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
-            </div>
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很遗憾</h3>
-            <p className="text-sm sm:text-base text-slate-400 mb-4">这张刮刮乐没有中奖</p>
+            {isOutOfStock ? (
+              <>
+                {/* API Key 库存不足的友好提示 */}
+                <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-full flex items-center justify-center border border-amber-400/30">
+                  <Package className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很抱歉</h3>
+                <p className="text-sm sm:text-base text-slate-300 mb-2">
+                  今日 API Key 兑换码库存不足
+                </p>
+                <p className="text-xs text-slate-400 mb-4">
+                  感谢您的参与，请明日再来试试运气吧～
+                </p>
+              </>
+            ) : (
+              <>
+                {/* 普通未中奖 */}
+                <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-slate-600 rounded-full flex items-center justify-center">
+                  <Gift className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white mb-2">很遗憾</h3>
+                <p className="text-sm sm:text-base text-slate-400 mb-4">这张刮刮乐没有中奖</p>
+              </>
+            )}
             <div className="flex gap-2 sm:gap-3">
               <button onClick={onClose} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
-                好的
+                {isOutOfStock ? '我知道了' : '好的'}
               </button>
               {canPlayAgain && (
                 <button onClick={onPlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-orange-500 to-red-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
@@ -102,7 +128,7 @@ function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-orange-800 via-red-800 to-pink-800'} rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-orange-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-orange-800 via-red-800 to-pink-800'} rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-orange-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
         {/* 装饰粒子 */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {[...Array(20)].map((_, i) => (
@@ -477,6 +503,33 @@ export default function ScratchCard({ onBalanceUpdate, externalBalance, userRole
   const [prize, setPrize] = useState(null)
   const [showCelebration, setShowCelebration] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [testDrawing, setTestDrawing] = useState(false) // 管理员测试抽奖状态
+
+  // 管理员测试：直接抽中 API Key
+  const handleTestDraw = async () => {
+    if (!isAdmin || testDrawing) return
+    setTestDrawing(true)
+    try {
+      const result = await lotteryApi.adminTestScratchDrawApiKey()
+      if (result.success) {
+        // 构造一个和刮刮乐类似的奖品对象并显示
+        setPrize({
+          prize_type: 'API_KEY',
+          prize_name: result.prize_name,
+          api_key_code: result.api_key_code,
+          is_rare: true,
+        })
+        setShowCelebration(true)
+        toast.success(`测试成功！${result.message}`)
+      } else {
+        toast.warning(result.message || 'API Key 库存不足')
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '测试失败')
+    } finally {
+      setTestDrawing(false)
+    }
+  }
 
   // 加载刮刮乐信息
   const loadScratchInfo = useCallback(async () => {
@@ -809,6 +862,24 @@ export default function ScratchCard({ onBalanceUpdate, externalBalance, userRole
       <p className="text-center text-xs text-slate-400 mt-3">
         刮开涂层揭晓奖品，有机会获得神秘兑换码
       </p>
+
+      {/* 管理员测试按钮 */}
+      {isAdmin && (
+        <button
+          onClick={handleTestDraw}
+          disabled={testDrawing}
+          className="w-full mt-3 py-2 rounded-lg text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors flex items-center justify-center gap-2"
+        >
+          {testDrawing ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <>
+              <Key className="w-4 h-4" />
+              测试：直接抽中API Key
+            </>
+          )}
+        </button>
+      )}
 
       {/* 中奖庆祝弹窗 */}
       {showCelebration && prize && (

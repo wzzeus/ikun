@@ -2754,7 +2754,7 @@ function ApiKeyPanel() {
   const [showAdd, setShowAdd] = useState(false)
   const [showBatchAdd, setShowBatchAdd] = useState(false)
   const [newKey, setNewKey] = useState({ code: '', quota: '', description: '' })
-  const [batchData, setBatchData] = useState({ codes: '', quota: '', description: '' })
+  const [batchData, setBatchData] = useState({ codes: '', quota: '', description: '抽奖' })
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -2882,8 +2882,17 @@ function ApiKeyPanel() {
 
     try {
       const result = await adminApi2.batchCreateApiKeys(batchItems)
-      toast.success(`成功添加 ${result.created} 个兑换码`)
-      setBatchData({ codes: '', quota: '', description: '' })
+      if (result.created > 0) {
+        const msg = result.skipped > 0
+          ? `成功添加 ${result.created} 个兑换码，跳过 ${result.skipped} 个重复`
+          : `成功添加 ${result.created} 个兑换码`
+        toast.success(msg)
+      } else if (result.skipped > 0) {
+        toast.warning(`所有 ${result.skipped} 个兑换码均已存在`)
+      } else {
+        toast.error(result.message || '添加失败')
+      }
+      setBatchData({ codes: '', quota: '', description: '抽奖' })
       setShowBatchAdd(false)
       loadKeys()
     } catch (error) {

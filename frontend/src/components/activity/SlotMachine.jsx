@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Zap, Coins, RefreshCw, Volume2, VolumeX, Trophy, Star, X, HelpCircle, Shield } from 'lucide-react'
+import { Zap, Coins, RefreshCw, Volume2, VolumeX, Trophy, Star, X, HelpCircle, Shield, Key, Copy, Check } from 'lucide-react'
 import api from '../../services/api'
-import { pointsApi } from '../../services'
+import { pointsApi, slotMachineApi } from '../../services'
 import { useToast } from '../Toast'
 import { trackLottery } from '../../utils/analytics'
 import GameHelpModal, { HelpButton } from './GameHelpModal'
@@ -39,8 +39,10 @@ const SYMBOL_INDEX = LOCAL_SYMBOLS.reduce((acc, s, i) => { acc[s.key] = i; retur
 // 中奖规则现在从后端数据库读取
 // 前端只负责显示，所有中奖计算都在后端完成
 
-// iKun转转乐中奖庆祝弹窗
+// iKun转转乐中奖庆祝弹窗 - 与抽奖/扭蛋机统一样式
 function SlotWinModal({ result, symbols, onClose, onPlayAgain, canPlayAgain }) {
+  const [copied, setCopied] = useState(false)
+
   // 获取实际的4个滚轴符号
   const getReelSymbols = () => {
     if (result.reels && result.reels.length === 4) {
@@ -52,22 +54,38 @@ function SlotWinModal({ result, symbols, onClose, onPlayAgain, canPlayAgain }) {
 
   const isJackpot = result.isJackpot
   const reelSymbols = getReelSymbols()
+  const isTestMode = result.points === 0 && result.apiKeyCode // 测试模式：积分为0但有兑换码
+  const hasApiKey = !!result.apiKeyCode
+  // 稀有主题：大奖、有API Key、或测试模式
+  const isRareTheme = isJackpot || hasApiKey || isTestMode
+
+  // 复制兑换码
+  const handleCopyCode = async () => {
+    if (!result.apiKeyCode) return
+    try {
+      await navigator.clipboard.writeText(result.apiKeyCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('复制失败:', err)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-gradient-to-br ${isJackpot ? 'from-yellow-500 via-orange-500 to-red-500' : 'from-green-600 via-emerald-600 to-teal-600'} rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm overflow-hidden border-2 ${isJackpot ? 'border-yellow-300' : 'border-green-400'} animate-[scaleIn_0.3s_ease-out]`}>
-        {/* 装饰粒子/闪光 */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative bg-gradient-to-br ${isRareTheme ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-purple-800 via-pink-800 to-rose-800'} rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border ${isRareTheme ? 'border-yellow-400/50' : 'border-purple-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+        {/* 装饰粒子 */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(isJackpot ? 30 : 15)].map((_, i) => (
+          {[...Array(20)].map((_, i) => (
             <div
               key={i}
-              className={`absolute w-1.5 h-1.5 sm:w-2 sm:h-2 ${isJackpot ? 'bg-yellow-200' : 'bg-green-200'} rounded-full animate-ping`}
+              className={`absolute w-1.5 h-1.5 sm:w-2 sm:h-2 ${isRareTheme ? 'bg-yellow-300' : 'bg-purple-300'} rounded-full animate-ping`}
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
                 animationDelay: `${Math.random() * 2}s`,
-                animationDuration: `${0.8 + Math.random() * 0.5}s`,
+                animationDuration: `${1 + Math.random()}s`,
               }}
             />
           ))}
@@ -84,7 +102,7 @@ function SlotWinModal({ result, symbols, onClose, onPlayAgain, canPlayAgain }) {
             {reelSymbols.map((symbol, i) => (
               <div
                 key={i}
-                className={`w-11 h-11 sm:w-14 sm:h-14 ${isJackpot ? 'bg-yellow-400/30' : 'bg-green-400/30'} rounded-xl flex items-center justify-center border-2 ${isJackpot ? 'border-yellow-300' : 'border-green-300'} ${isJackpot ? 'animate-bounce' : ''} overflow-hidden`}
+                className={`w-11 h-11 sm:w-14 sm:h-14 bg-white rounded-xl flex items-center justify-center border-2 ${isRareTheme ? 'border-yellow-300' : 'border-purple-300'} overflow-hidden shadow-lg`}
                 style={{ animationDelay: `${i * 0.1}s` }}
               >
                 <img src={symbol.img} alt={symbol.name} className="w-9 h-9 sm:w-12 sm:h-12 object-cover rounded-lg" />
@@ -93,56 +111,95 @@ function SlotWinModal({ result, symbols, onClose, onPlayAgain, canPlayAgain }) {
           </div>
 
           {/* 奖励图标 */}
-          <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4">
-            <div className={`absolute inset-0 bg-gradient-to-br ${isJackpot ? 'from-yellow-300 to-orange-400' : 'from-green-300 to-emerald-400'} rounded-full shadow-2xl ${isJackpot ? 'animate-pulse' : ''}`}>
-              <div className="absolute top-1.5 sm:top-2 left-2 sm:left-3 w-4 sm:w-5 h-4 sm:h-5 bg-white/30 rounded-full" />
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 sm:mb-4">
+            <div className={`absolute inset-0 bg-gradient-to-br ${isRareTheme ? 'from-yellow-400 to-orange-500' : 'from-purple-400 to-pink-500'} rounded-full shadow-2xl ${isRareTheme ? 'animate-pulse' : ''}`}>
+              <div className="absolute top-2 sm:top-3 left-3 sm:left-4 w-5 sm:w-6 h-5 sm:h-6 bg-white/30 rounded-full" />
             </div>
             <div className="absolute inset-0 flex items-center justify-center">
-              {isJackpot ? (
-                <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+              {hasApiKey ? (
+                <Key className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+              ) : isJackpot ? (
+                <Trophy className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
               ) : (
-                <Coins className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                <Coins className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
               )}
             </div>
           </div>
 
-          <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            {isJackpot ? '🎉 JACKPOT! 🎉' : '恭喜中奖！'}
+          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+            {isTestMode ? '🎁 测试成功！' : (isRareTheme ? '大奖来袭！' : '恭喜中奖！')}
           </h3>
 
           {/* 奖励展示 */}
-          <div className="bg-white/15 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
-            <div className="text-sm sm:text-lg text-white/80 mb-1">{result.message}</div>
-            <div className={`text-2xl sm:text-4xl font-bold ${isJackpot ? 'text-yellow-200' : 'text-green-200'}`}>
-              +{result.points} 积分
-            </div>
-            {result.apiKeyCode && (
-              <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-white/10 rounded-lg border border-yellow-300/50">
-                <div className="text-xs sm:text-sm text-yellow-200 mb-1">🎁 额外奖励：兑换码</div>
-                <div className="text-xs text-white/90 font-mono break-all select-all">
-                  {result.apiKeyCode}
-                </div>
-                {result.apiKeyQuota && (
-                  <div className="text-xs text-yellow-300 mt-1">额度：${result.apiKeyQuota}</div>
-                )}
+          <div className="bg-white/10 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
+            {/* 测试模式下不显示message，避免重复 */}
+            {!isTestMode && result.message && (
+              <div className={`text-lg sm:text-2xl font-bold ${isRareTheme ? 'text-yellow-300' : 'text-purple-200'}`}>
+                {result.message}
               </div>
             )}
-            {isJackpot && (
-              <div className="flex items-center justify-center gap-1 mt-2 text-yellow-300">
+            {/* 只有在非测试模式且有实际积分时才显示积分 */}
+            {!isTestMode && result.points > 0 && (
+              <div className={`text-2xl sm:text-3xl font-bold mt-1 ${isRareTheme ? 'text-yellow-200' : 'text-purple-200'}`}>
+                +{result.points} 积分
+              </div>
+            )}
+            {isRareTheme && (
+              <div className="flex items-center justify-center gap-1 mt-2 text-yellow-400">
                 <Star className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="text-xs sm:text-sm font-medium">{result.multiplier}倍奖励！</span>
+                <span className="text-xs sm:text-sm font-medium">稀有奖品</span>
                 <Star className="w-3 h-3 sm:w-4 sm:h-4" />
               </div>
+            )}
+
+            {/* API Key 兑换码显示区 */}
+            {result.apiKeyCode && (
+              <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-black/30 rounded-lg">
+                <p className="text-xs text-yellow-400/80 mb-1 sm:mb-2">兑换码（请妥善保存）</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-black/40 px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm text-yellow-300 font-mono break-all select-all">
+                    {result.apiKeyCode}
+                  </code>
+                  <button
+                    onClick={handleCopyCode}
+                    className={`p-1.5 sm:p-2 rounded-lg transition-all ${
+                      copied
+                        ? 'bg-green-500/30 text-green-300'
+                        : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
+                    }`}
+                    title={copied ? '已复制' : '复制兑换码'}
+                  >
+                    {copied ? <Check className="w-4 h-4 sm:w-5 sm:h-5" /> : <Copy className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  </button>
+                </div>
+                {result.apiKeyQuota && (
+                  <p className="text-xs text-yellow-400/60 mt-1 sm:mt-2">额度：${result.apiKeyQuota}</p>
+                )}
+                <p className="text-xs text-white/50 mt-1 sm:mt-2">可在背包中随时查看已获得的兑换码</p>
+              </div>
+            )}
+            {result.apiKeyMessage && !result.apiKeyCode && (
+              <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-amber-500/20 rounded-lg border border-amber-400/30">
+                <div className="text-xs sm:text-sm text-amber-200">
+                  {result.apiKeyMessage.includes('抽完')
+                    ? '🎁 很抱歉，今日额外的 API Key 兑换码库存不足～'
+                    : result.apiKeyMessage}
+                </div>
+              </div>
+            )}
+
+            {!isTestMode && (
+              <p className="text-purple-200 text-xs sm:text-sm mt-2">奖励已发放到您的账户</p>
             )}
           </div>
 
           {/* 按钮 */}
           <div className="flex gap-2 sm:gap-3">
-            <button onClick={onClose} className="flex-1 py-2.5 sm:py-3 text-sm sm:text-base bg-white/15 hover:bg-white/25 text-white font-medium rounded-xl transition-colors">
+            <button onClick={onClose} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
               好的
             </button>
-            {canPlayAgain && (
-              <button onClick={onPlayAgain} className={`flex-1 py-2.5 sm:py-3 text-sm sm:text-base ${isJackpot ? 'bg-gradient-to-r from-yellow-400 to-orange-400' : 'bg-gradient-to-r from-green-400 to-emerald-400'} text-white font-bold rounded-xl hover:shadow-lg transition-all`}>
+            {canPlayAgain && !isTestMode && (
+              <button onClick={onPlayAgain} className="flex-1 py-2 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
                 再来一次
               </button>
             )}
@@ -229,12 +286,14 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
   const [showWinModal, setShowWinModal] = useState(false)
   const [winModalData, setWinModalData] = useState(null)
   const [showHelp, setShowHelp] = useState(false)
+  const [testDrawing, setTestDrawing] = useState(false) // 管理员测试抽奖状态
 
   // 从后端获取的配置
   const [config, setConfig] = useState(null)
   const [symbols, setSymbols] = useState([])
   const [todayCount, setTodayCount] = useState(0)
   const [dailyLimit, setDailyLimit] = useState(null)
+  const [slotTickets, setSlotTickets] = useState(0) // 老虎机券数量
   const costPoints = config?.cost_points ?? 30
 
   // 加载iKun转转乐配置（包含余额和次数）
@@ -246,6 +305,7 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
       setBalance(data.balance || 0)
       setTodayCount(data.today_count || 0)
       setDailyLimit(data.config?.daily_limit || null)
+      setSlotTickets(data.slot_tickets || 0)
     } catch (e) {
       console.error('加载iKun转转乐配置失败:', e)
     } finally {
@@ -321,9 +381,12 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
 
   // iKun转转乐 - 调用后端API进行抽奖，所有结果由后端计算
   const handleSpin = useCallback(async () => {
-    if (spinning || balance < costPoints) return
-    // 管理员不限次数
-    if (!isAdmin && dailyLimit && todayCount >= dailyLimit) return
+    // 有券或有足够积分才能玩
+    const hasTicket = slotTickets > 0
+    const canAfford = balance >= costPoints
+    if (spinning || (!hasTicket && !canAfford)) return
+    // 管理员不限次数，使用券也不受日限
+    if (!isAdmin && !hasTicket && dailyLimit && todayCount >= dailyLimit) return
 
     // 开始转动动画
     setSpinning(true)
@@ -332,19 +395,25 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
 
     // 保存原始余额用于回滚
     const originalBalance = balance
+    const originalTickets = slotTickets
 
-    // 先扣除积分（乐观更新）
-    const newBalance = balance - costPoints
-    setBalance(newBalance)
+    // 先扣除积分或券（乐观更新）
+    if (hasTicket) {
+      setSlotTickets(prev => Math.max(0, prev - 1))
+    } else {
+      const newBalance = balance - costPoints
+      setBalance(newBalance)
+    }
 
     // 调用后端API
     let response = null
     try {
-      response = await api.post('/slot-machine/spin')
+      response = await api.post('/slot-machine/spin', { use_ticket: hasTicket })
     } catch (e) {
       console.error('iKun转转乐请求失败:', e)
-      // 请求失败时回滚余额
+      // 请求失败时回滚
       setBalance(originalBalance)
+      setSlotTickets(originalTickets)
       onBalanceUpdate?.(originalBalance)
       setSpinning(false)
       toast.error(e?.response?.data?.detail || '网络异常，请重试')
@@ -396,7 +465,10 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
       const finalBalance = response.balance
       setBalance(finalBalance)
       onBalanceUpdate?.(finalBalance)
-      setTodayCount(prev => prev + 1)
+      // 使用券时不计入日限
+      if (!response.used_ticket) {
+        setTodayCount(prev => prev + 1)
+      }
 
       setLastWin({
         win: isWin,
@@ -412,6 +484,7 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
         reelKeys,
         apiKeyCode: response.api_key_code,
         apiKeyQuota: response.api_key_quota,
+        apiKeyMessage: response.api_key_message,
       })
 
       if (isWin && !hasPenalty) {
@@ -428,6 +501,7 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
           freePlay: false,
           apiKeyCode: response.api_key_code,
           apiKeyQuota: response.api_key_quota,
+          apiKeyMessage: response.api_key_message,
         })
         setShowWinModal(true)
       } else if (hasPenalty) {
@@ -447,7 +521,7 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
 
       trackLottery('slot', costPoints, isWin ? `${winName}:${payout}积分` : '未中奖')
     }, totalDuration)
-  }, [spinning, balance, costPoints, dailyLimit, todayCount, isAdmin, onBalanceUpdate, playSound, toast])
+  }, [spinning, balance, costPoints, dailyLimit, todayCount, isAdmin, slotTickets, onBalanceUpdate, playSound, toast])
 
   // 关闭中奖弹窗
   const handleCloseWinModal = () => {
@@ -467,8 +541,45 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
     }, 100)
   }
 
+  // 管理员测试：直接抽中 API Key
+  const handleTestDraw = async () => {
+    if (!isAdmin || testDrawing) return
+    setTestDrawing(true)
+    try {
+      const result = await slotMachineApi.adminTestDrawApiKey()
+      if (result.success) {
+        // 显示中奖弹窗
+        setWinModalData({
+          win: true,
+          multiplier: 1,
+          points: 0,
+          message: '测试成功！已分配 API Key 兑换码',
+          isJackpot: true,
+          reels: [0, 0, 0, 0],
+          winNames: ['API Key 兑换码'],
+          freePlay: false,
+          apiKeyCode: result.api_key_code,
+          apiKeyQuota: result.api_key_quota,
+          apiKeyMessage: null,
+        })
+        setShowWinModal(true)
+        playSound('win')
+        toast.success(`测试成功！${result.message}`)
+      } else {
+        toast.warning(result.message || 'API Key 库存不足')
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '测试失败')
+    } finally {
+      setTestDrawing(false)
+    }
+  }
+
   // canSpin 需要同时检查日限（管理员不限次数）
-  const canSpin = !spinning && balance >= costPoints && (isAdmin || dailyLimit === null || todayCount < dailyLimit)
+  // 有券或有足够积分都可以玩（券不受日限影响）
+  const hasTicket = slotTickets > 0
+  const canAffordWithPoints = balance >= costPoints && (isAdmin || dailyLimit === null || todayCount < dailyLimit)
+  const canSpin = !spinning && (hasTicket || canAffordWithPoints)
 
   if (loading) {
     return (
@@ -728,10 +839,15 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
             <RefreshCw className="w-5 h-5 animate-spin" />
             转动中...
           </span>
-        ) : !isAdmin && dailyLimit && todayCount >= dailyLimit ? (
+        ) : !isAdmin && !hasTicket && dailyLimit && todayCount >= dailyLimit ? (
           '今日次数已用完'
-        ) : balance < costPoints ? (
+        ) : !hasTicket && balance < costPoints ? (
           '积分不足'
+        ) : hasTicket ? (
+          <span className="flex items-center justify-center gap-2">
+            <Zap className="w-5 h-5" />
+            免费拉动（券×{slotTickets}）
+          </span>
         ) : (
           <span className="flex items-center justify-center gap-2">
             <Zap className="w-5 h-5" />
@@ -754,6 +870,24 @@ export default function SlotMachine({ onBalanceUpdate, externalBalance, userRole
           </div>
         ))}
       </div>
+
+      {/* 管理员测试按钮 */}
+      {isAdmin && (
+        <button
+          onClick={handleTestDraw}
+          disabled={testDrawing}
+          className="w-full mt-3 py-2 rounded-lg text-sm font-medium bg-amber-400/30 text-amber-300 hover:bg-amber-400/50 transition-colors flex items-center justify-center gap-2 border border-amber-400/30"
+        >
+          {testDrawing ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <>
+              <Key className="w-4 h-4" />
+              测试：直接抽中API Key
+            </>
+          )}
+        </button>
+      )}
 
       {/* 底部装饰灯光 */}
       <div className="absolute bottom-0 left-0 right-0 flex justify-around py-1.5 sm:py-2">

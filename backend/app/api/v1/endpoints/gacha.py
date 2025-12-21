@@ -361,11 +361,10 @@ async def play_gacha(
             if api_key_info:
                 result_prize_value = {"code": api_key_info["code"], "quota": api_key_info["quota"]}
             else:
-                fallback_points = 200
-                await grant_points_reward(db, user_id, fallback_points, f"扭蛋机中奖: 兑换码已发完，补偿{fallback_points}积分")
-                result_prize_name = f"{fallback_points}积分（兑换码已发完）"
-                result_prize_type = "points"
-                result_prize_value = {"amount": fallback_points}
+                # API Key库存不足，仅提示用户
+                result_prize_name = "API Key（已发完）"
+                result_prize_type = "empty"
+                result_prize_value = {"message": "抱歉，API Key兑换码已被抽完！"}
                 result_is_rare = False
 
         # 扣减库存（使用原子 UPDATE 防止并发超卖）
@@ -600,6 +599,55 @@ async def delete_gacha_prize(
     await db.delete(prize)
     await db.commit()
     return {"success": True}
+
+
+class AdminTestDrawResponse(BaseModel):
+    """管理员测试抽奖响应"""
+    success: bool
+    prize_name: str
+    prize_type: str
+    api_key_code: Optional[str] = None
+    api_key_quota: Optional[float] = None
+    message: str
+
+
+@router.post("/admin/test-draw-apikey", response_model=AdminTestDrawResponse)
+async def admin_test_draw_apikey(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    管理员测试：强制抽中 API Key 兑换码
+    - 仅管理员可用
+    - 不消耗积分
+    - 直接分配一个可用的 API Key
+    """
+    require_admin(current_user)
+    user_id = current_user.id
+
+    try:
+        api_key_info = await grant_api_key_reward(db, user_id, "扭蛋机")
+
+        if api_key_info:
+            await db.commit()
+            return AdminTestDrawResponse(
+                success=True,
+                prize_name="API Key 兑换码",
+                prize_type="API_KEY",
+                api_key_code=api_key_info["code"],
+                api_key_quota=api_key_info["quota"],
+                message="测试成功！已分配 API Key 兑换码"
+            )
+        else:
+            return AdminTestDrawResponse(
+                success=False,
+                prize_name="API Key（已发完）",
+                prize_type="EMPTY",
+                message="API Key 库存不足，无法分配"
+            )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"测试失败: {str(e)}")
 
 
 @router.get("/admin/stats")

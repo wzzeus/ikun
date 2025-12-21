@@ -30,6 +30,7 @@ export default function ParticipantsPage() {
   const [filteredParticipants, setFilteredParticipants] = useState([])
   const [githubStats, setGithubStats] = useState({})
   const [cheerStats, setCheerStats] = useState({})
+  const [onlineStatus, setOnlineStatus] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -47,11 +48,12 @@ export default function ParticipantsPage() {
       try {
         setLoading(true)
 
-        // 并行获取选手列表、GitHub 统计、批量打气统计
-        const [participantsRes, githubRes, cheersRes] = await Promise.all([
+        // 并行获取选手列表、GitHub 统计、批量打气统计、在线状态
+        const [participantsRes, githubRes, cheersRes, onlineRes] = await Promise.all([
           api.get('/contests/1/registrations/public'),
           api.get('/contests/1/github-stats').catch(() => ({ items: [] })),
           api.get('/contests/1/cheers/stats').catch(() => ({ data: {} })),
+          api.get('/contests/1/online-status').catch(() => ({})),
         ])
 
         const items = participantsRes.items || []
@@ -77,6 +79,9 @@ export default function ParticipantsPage() {
         // 批量打气统计（避免 N+1 串行请求）
         setCheerStats(cheersRes?.data || {})
 
+        // 在线状态：{ registration_id: boolean }
+        setOnlineStatus(onlineRes || {})
+
       } catch (err) {
         setError(err?.response?.data?.detail || '加载失败')
       } finally {
@@ -85,6 +90,40 @@ export default function ParticipantsPage() {
     }
 
     fetchData()
+  }, [])
+
+  // 在线状态轮询（30秒 ± 5秒 jitter，避免惊群）
+  useEffect(() => {
+    let timer = null
+
+    const scheduleNextPoll = () => {
+      // 30秒 ± 5秒随机抖动
+      const jitter = Math.random() * 10_000 - 5_000
+      const delay = 30_000 + jitter
+
+      timer = setTimeout(async () => {
+        // 页面不可见时跳过请求
+        if (document.hidden) {
+          scheduleNextPoll()
+          return
+        }
+
+        try {
+          const res = await api.get('/contests/1/online-status')
+          if (res) setOnlineStatus(res)
+        } catch {
+          // 静默失败，不影响用户体验
+        }
+
+        scheduleNextPoll()
+      }, delay)
+    }
+
+    scheduleNextPoll()
+
+    return () => {
+      if (timer) clearTimeout(timer)
+    }
   }, [])
 
   // 搜索过滤
@@ -250,6 +289,7 @@ export default function ParticipantsPage() {
               const stats = githubStats[participant.id] || {}
               const cheer = cheerStats[participant.id] || { total: 0, cheer_types: {}, user_cheered_today: {} }
               const hasGithub = !!participant.repo_url
+              const isOnline = !!onlineStatus[participant.id]
 
               return (
                 <div
@@ -266,8 +306,16 @@ export default function ParticipantsPage() {
                           alt={participant.user?.display_name}
                           className="w-14 h-14 rounded-xl object-cover ring-2 ring-zinc-100 dark:ring-zinc-800 group-hover:ring-primary/20 transition-all"
                         />
-                        <div className="absolute -bottom-1 -right-1 bg-white dark:bg-zinc-900 rounded-full p-0.5">
-                          <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-zinc-900" />
+                        <div
+                          className="absolute -bottom-1 -right-1 bg-white dark:bg-zinc-900 rounded-full p-0.5"
+                          title={isOnline ? '在线（5分钟内有API调用）' : '离线（5分钟内无API调用）'}
+                        >
+                          <div
+                            className={cn(
+                              'w-3 h-3 rounded-full border-2 border-white dark:border-zinc-900 shadow-sm',
+                              isOnline ? 'bg-emerald-500' : 'bg-zinc-400 dark:bg-zinc-600'
+                            )}
+                          />
                         </div>
                       </div>
                       <div>
