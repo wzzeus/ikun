@@ -1,6 +1,6 @@
 # GitHub Webhook 自动部署
 
-当你 `git push` 到 `main` 分支时，服务器会自动拉取代码并重新部署。
+当你 `git push` 到 `main` 分支时，服务器会自动拉取代码、执行数据库迁移、重新部署，并发送微信通知。
 
 ## 服务器配置步骤
 
@@ -112,3 +112,18 @@ bash deploy/webhook/deploy.sh
 ### GitHub Webhook 投递记录
 在 GitHub 仓库的 Settings → Webhooks → 点击你的 webhook → Recent Deliveries
 可以看到每次推送的投递状态和响应。
+
+## 功能特性
+
+### 自动数据库迁移
+- 部署时自动执行增量迁移（`backend/sql/NNN_*.sql`）
+- 版本跟踪，避免重复执行
+- 文件锁防止并发冲突
+- 详细迁移日志：`logs/migrations.log`
+- 详见：[MIGRATIONS.md](./MIGRATIONS.md)
+
+### 微信推送通知
+部署完成后自动推送微信消息，包含：
+- 部署时间
+- 环境信息
+- 健康检查状态
