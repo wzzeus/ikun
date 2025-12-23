@@ -9,7 +9,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-chicken}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"  # 仅绑定本地，防止外部访问
     volumes:
       - mysql_data:/var/lib/mysql
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
@@ -18,15 +18,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped  # 自动重启
 
   # Redis 缓存
   redis:
     image: redis:7-alpine
     container_name: chicken_king_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # 仅绑定本地，防止外部访问
     volumes:
       - redis_data:/data
+    restart: unless-stopped  # 自动重启
 
   # FastAPI 后端
   backend:
@@ -35,7 +37,7 @@ services:
       dockerfile: Dockerfile
     container_name: chicken_king_backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"  # 仅绑定本地，通过 nginx 代理访问
     environment:
       - DATABASE_URL=mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:-password}@db:3306/${MYSQL_DATABASE:-chicken_king}
       - REDIS_URL=redis://redis:6379/0
@@ -54,6 +56,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+    restart: unless-stopped  # 自动重启
 
   # React 前端 (生产模式 - Nginx 静态文件服务)
   frontend:
@@ -64,7 +67,8 @@ services:
         - VITE_API_URL=${VITE_API_URL:-/api/v1}
     container_name: chicken_king_frontend
     ports:
-      - "5174:80"
+      - "127.0.0.1:5174:80"  # 仅绑定本地，通过 nginx 代理访问
+    restart: unless-stopped  # 自动重启
 
   # Umami 统计分析
   umami:
