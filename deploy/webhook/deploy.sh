@@ -78,13 +78,13 @@ sha256_file() {
 # 在 DB 容器内执行 MySQL 查询（返回结果）
 db_query() {
     local sql="$1"
-    docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot -N -B "$MYSQL_DATABASE"' <<< "$sql"
+    docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B "$MYSQL_DATABASE"' <<< "$sql"
 }
 
 # 在 DB 容器内执行 MySQL 命令（不返回结果）
 db_exec() {
     local sql="$1"
-    docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' <<< "$sql"
+    docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' <<< "$sql"
 }
 
 # 等待数据库就绪
@@ -112,7 +112,7 @@ ensure_database_exists() {
     log_migration "确保数据库存在..."
 
     # 使用 mysql 系统数据库连接，创建目标数据库
-    if docker exec "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=tcp -h 127.0.0.1 -uroot -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"' >/dev/null 2>&1; then
+    if docker exec "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"' >/dev/null 2>&1; then
         log_migration "✅ 数据库已就绪: \$MYSQL_DATABASE"
     else
         log_migration "❌ 创建数据库失败"
@@ -193,7 +193,7 @@ run_migrations() {
 
         # 优先使用 production_clean_db.sql（包含完整表结构 + 配置 + 示例数据）
         if [ -f "$MIGRATIONS_DIR/production_clean_db.sql" ]; then
-            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/production_clean_db.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
+            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/production_clean_db.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
                 log_migration "✅ 初始数据库导入成功（包含表结构、配置数据、示例报名）"
             else
                 log_migration "❌ 初始数据库导入失败（详见 $MIGRATION_LOG_FILE）"
@@ -202,13 +202,13 @@ run_migrations() {
         # 兼容旧方式：schema.sql + seed_production_config.sql
         elif [ -f "$MIGRATIONS_DIR/schema.sql" ]; then
             log_migration "⚠️ 未找到 production_clean_db.sql，使用旧方式 schema.sql..."
-            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/schema.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
+            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/schema.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
                 log_migration "✅ 基础 schema 执行成功"
 
                 # 导入配置数据
                 if [ -f "$MIGRATIONS_DIR/seed_production_config.sql" ]; then
                     log_migration "导入配置数据..."
-                    if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/seed_production_config.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
+                    if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/seed_production_config.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
                         log_migration "✅ 配置数据导入成功"
                     else
                         log_migration "⚠️ 配置数据导入失败（非致命错误）"
@@ -271,7 +271,7 @@ run_migrations() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] === APPLY $base ==="
         } >> "$MIGRATION_LOG_FILE"
 
-        if ! docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$file" >> "$MIGRATION_LOG_FILE" 2>&1; then
+        if ! docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$file" >> "$MIGRATION_LOG_FILE" 2>&1; then
             log_migration "❌ 迁移失败: $base（详见 $MIGRATION_LOG_FILE）"
             return 1
         fi
