@@ -316,14 +316,19 @@ cd "$PROJECT_DIR"
 
 # 1. 拉取最新代码
 log "拉取最新代码..."
-SCRIPT_CHECKSUM_BEFORE=$(md5sum "$0" 2>/dev/null || echo "none")
+
+# 记录当前脚本的 git 版本（在 git pull 之前）
+SCRIPT_VERSION_BEFORE=$(git log -1 --format=%H -- deploy/webhook/deploy.sh 2>/dev/null || echo "unknown")
+
 git fetch origin main
 git reset --hard origin/main
 
-# 检查脚本是否被更新,如果是则重新执行
-SCRIPT_CHECKSUM_AFTER=$(md5sum "$0" 2>/dev/null || echo "none")
-if [ "$SCRIPT_CHECKSUM_BEFORE" != "$SCRIPT_CHECKSUM_AFTER" ]; then
-    log "⚠️  部署脚本已更新,重新执行..."
+# 检查脚本是否被更新（对比 git 版本而非文件校验和）
+SCRIPT_VERSION_AFTER=$(git log -1 --format=%H -- deploy/webhook/deploy.sh 2>/dev/null || echo "unknown")
+
+if [ "$SCRIPT_VERSION_BEFORE" != "$SCRIPT_VERSION_AFTER" ] && [ "$SCRIPT_VERSION_AFTER" != "unknown" ]; then
+    log "⚠️  部署脚本已更新 ($SCRIPT_VERSION_BEFORE -> $SCRIPT_VERSION_AFTER)"
+    log "⚠️  重新执行脚本..."
     exec bash "$0" "$@"
 fi
 

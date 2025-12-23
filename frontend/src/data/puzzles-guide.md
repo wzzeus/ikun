@@ -186,6 +186,7 @@ startTimer()
 | **解题** | 修复图片路径 |
 
 **解题步骤：**
+
 1. F12 → Elements 面板
 2. 找到 `id="broken-img"` 的 img 元素
 3. 查看 `data-correct-src` 属性获取正确路径
@@ -327,6 +328,7 @@ document.querySelector('#secret-btn').dataset.answer
 | **答案** | `chicken` |
 | **提示** | 真的没有吗？ |
 | **解析** | 答案在浏览器标签页标题里 |
+|  |  |
 
 ---
 

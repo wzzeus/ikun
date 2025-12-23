@@ -158,6 +158,39 @@ sed -i.bak "s@__MYSQL_ROOT_PASSWORD__@${MYSQL_ROOT_PASSWORD}@g" .env
 
 **提交**: `cdf26c9` - fix: 修复部署脚本密码特殊字符处理问题
 
+### 脚本自动重载失败 - Docker 卷挂载实时同步问题 (2025-12-23 12:00)
+
+**问题**: 使用 `md5sum "$0"` 在 git pull 前后对比脚本变化时,由于 Docker 卷挂载的实时同步特性,两次计算的都是**更新后的文件**,导致校验和始终相同,自动重载永远不会触发。
+
+**根本原因**:
+1. Webhook 容器挂载: `宿主机 /opt/chicken-king/deploy/webhook/deploy.sh` → `容器内 /webhook/deploy.sh`
+2. 脚本在容器内执行时 `$0 = /webhook/deploy.sh`
+3. `git reset --hard` 更新宿主机文件后,挂载点**立即同步**
+4. 在同一个 bash 进程内,`md5sum "$0"` 在 git 前后计算的都是新文件
+
+**错误的方法**:
+```bash
+CHECKSUM_BEFORE=$(md5sum "$0")  # ← 计算的是即将被更新的文件
+git reset --hard origin/main     # ← 文件被更新
+CHECKSUM_AFTER=$(md5sum "$0")   # ← 由于挂载同步,计算的也是新文件!
+# 结果: BEFORE == AFTER (都是新文件的校验和)
+```
+
+**正确的方法**:
+使用 git log 对比脚本的提交历史,而不是文件内容:
+```bash
+# 记录当前脚本的最后提交 hash
+BEFORE=$(git log -1 --format=%H -- deploy/webhook/deploy.sh)
+git reset --hard origin/main
+AFTER=$(git log -1 --format=%H -- deploy/webhook/deploy.sh)
+
+if [ "$BEFORE" != "$AFTER" ]; then
+    exec bash "$0" "$@"  # 重新执行
+fi
+```
+
+**提交**: 待提交
+
 ## 行动清单
 
 - [x] 分析攻击原因
