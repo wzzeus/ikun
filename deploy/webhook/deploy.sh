@@ -321,16 +321,29 @@ git reset --hard origin/main
 
 # 2. 生成生产环境配置
 log "生成生产环境配置..."
-cat > "$ENV_FILE" << 'ENVEOF'
+
+# 保留现有密码（如果 .env 文件已存在）
+EXISTING_MYSQL_ROOT_PASSWORD=""
+EXISTING_MYSQL_PASSWORD=""
+if [ -f "$ENV_FILE" ]; then
+    EXISTING_MYSQL_ROOT_PASSWORD=$(grep "^MYSQL_ROOT_PASSWORD=" "$ENV_FILE" | cut -d'=' -f2-)
+    EXISTING_MYSQL_PASSWORD=$(grep "^MYSQL_PASSWORD=" "$ENV_FILE" | cut -d'=' -f2-)
+fi
+
+# 使用现有密码或默认密码
+MYSQL_ROOT_PASSWORD="${EXISTING_MYSQL_ROOT_PASSWORD:-password}"
+MYSQL_PASSWORD="${EXISTING_MYSQL_PASSWORD:-password}"
+
+cat > "$ENV_FILE" << ENVEOF
 # ============================================================================
 # 生产环境配置 - 由部署脚本自动生成
 # ============================================================================
 
 # MySQL 数据库（注意：修改密码需要删除 mysql 数据卷重建）
-MYSQL_ROOT_PASSWORD=password
+MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
 MYSQL_DATABASE=chicken_king
 MYSQL_USER=chicken
-MYSQL_PASSWORD=password
+MYSQL_PASSWORD=$MYSQL_PASSWORD
 
 # 应用密钥（用于 JWT 签名）
 SECRET_KEY=a3f8c9d2e5b7a1f4c8d0e3b6a9f2c5d8e1b4a7f0c3d6e9b2a5f8c1d4e7b0a3f6
