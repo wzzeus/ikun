@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -84,6 +85,53 @@ async def _safe_update_status(
         await _update_status(client, submission_id, payload)
     except Exception as exc:
         logger.error("状态回写失败: submission_id=%s, error=%s", submission_id, exc)
+
+
+@dataclass(frozen=True)
+class QueueJob:
+    """队列任务"""
+    action: str
+    submission_id: int
+
+
+def _parse_queue_item(raw_value: bytes) -> Optional[QueueJob]:
+    """解析队列消息"""
+    if raw_value is None:
+        return None
+
+    text = raw_value.decode(errors="ignore") if isinstance(raw_value, (bytes, bytearray)) else str(raw_value)
+    text = text.strip()
+    if not text:
+        return None
+
+    try:
+        return QueueJob(action="deploy", submission_id=int(text))
+    except ValueError:
+        pass
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("无效的队列消息: %s", text)
+        return None
+
+    if not isinstance(data, dict):
+        logger.warning("无效的队列消息: %s", text)
+        return None
+
+    action = str(data.get("action", "")).lower()
+    submission_id = data.get("submission_id")
+    try:
+        submission_id = int(submission_id)
+    except (TypeError, ValueError):
+        logger.warning("无效的提交ID: %s", submission_id)
+        return None
+
+    if action not in {"deploy", "stop"}:
+        logger.warning("未知队列动作: %s", action)
+        return None
+
+    return QueueJob(action=action, submission_id=submission_id)
 
 
 @dataclass(frozen=True)
@@ -290,6 +338,16 @@ async def _cleanup_old_container(current_id: Optional[int], new_id: int) -> None
         logger.warning("清理旧容器失败: container=%s, error=%s", container_name, exc)
 
 
+async def _stop_submission(submission_id: int) -> None:
+    """停止运行中的容器"""
+    container_name = _build_container_name(submission_id)
+    try:
+        await _remove_container(container_name)
+        logger.info("已停止容器: submission_id=%s", submission_id)
+    except Exception as exc:
+        logger.warning("停止容器失败: submission_id=%s, error=%s", submission_id, exc)
+
+
 async def _process_submission(client: httpx.AsyncClient, submission_id: int) -> None:
     """处理单个提交"""
     container_name = _build_container_name(submission_id)
@@ -380,13 +438,14 @@ async def _worker_loop() -> None:
                     continue
 
                 _, raw_value = item
-                try:
-                    submission_id = int(raw_value)
-                except (TypeError, ValueError):
-                    logger.warning("无效的提交ID: %s", raw_value)
+                job = _parse_queue_item(raw_value)
+                if not job:
                     continue
 
-                await _process_submission(client, submission_id)
+                if job.action == "deploy":
+                    await _process_submission(client, job.submission_id)
+                elif job.action == "stop":
+                    await _stop_submission(job.submission_id)
     finally:
         await close_redis(redis_client)
 

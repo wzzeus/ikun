@@ -262,6 +262,16 @@ export const adminApi2 = {
   removeProjectReviewer: (projectId, reviewerId) =>
     api.delete(`/admin/projects/${projectId}/reviewers/${reviewerId}`),
 
+  // 作品部署管理
+  offlineProject: (projectId, message) =>
+    api.post(`/admin/projects/${projectId}/offline`, { message }),
+  redeployProjectSubmission: (submissionId, message) =>
+    api.post(`/admin/project-submissions/${submissionId}/redeploy`, { message }),
+  stopProjectSubmission: (submissionId, message) =>
+    api.post(`/admin/project-submissions/${submissionId}/stop`, { message }),
+  getProjectSubmissionLogs: (submissionId) =>
+    api.get(`/admin/project-submissions/${submissionId}/logs`),
+
   // 签到配置
   getSigninConfig: () => api.get('/admin/signin/config'),
   createMilestone: (data) => api.post('/admin/signin/milestones', data),

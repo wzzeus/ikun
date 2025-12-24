@@ -16,6 +16,7 @@ venv/
 .ssh/
 .tmp/
 .sync.tar.gz
+.spec-workflow/
 
 # 本地文档
 docs/进度与待办.md

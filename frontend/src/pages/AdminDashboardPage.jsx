@@ -43,7 +43,7 @@ import * as echarts from 'echarts'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/Toast'
 import { useThemeStore } from '../stores/themeStore'
-import { adminApi2, predictionApi } from '../services'
+import { adminApi2, predictionApi, projectApi } from '../services'
 
 // Tab 组件 - 现代简洁风格
 function Tab({ active, onClick, children, icon: Icon }) {
@@ -1414,6 +1414,382 @@ function ProjectReviewAssignPanel() {
           </table>
         </div>
       </div>
+    </div>
+  )
+}
+
+// 作品部署管理面板
+function ProjectDeployPanel() {
+  const toast = useToast()
+  const [projectIdInput, setProjectIdInput] = useState('')
+  const [project, setProject] = useState(null)
+  const [projectLoading, setProjectLoading] = useState(false)
+  const [submissions, setSubmissions] = useState([])
+  const [submissionsLoading, setSubmissionsLoading] = useState(false)
+  const [actionMessage, setActionMessage] = useState('')
+  const [offlineLoading, setOfflineLoading] = useState(false)
+  const [redeployingId, setRedeployingId] = useState(null)
+  const [stoppingId, setStoppingId] = useState(null)
+  const [logOpen, setLogOpen] = useState(false)
+  const [logLoading, setLogLoading] = useState(false)
+  const [logData, setLogData] = useState(null)
+
+  const STATUS_LABELS = {
+    created: '已创建',
+    queued: '排队中',
+    pulling: '拉取镜像',
+    deploying: '部署中',
+    healthchecking: '健康检查',
+    online: '已上线',
+    failed: '失败',
+  }
+
+  const STATUS_STYLES = {
+    created: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    queued: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+    pulling: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+    deploying: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+    healthchecking: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+    online: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+    failed: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  }
+
+  const formatDateTime = (value) => {
+    if (!value) return '-'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '-'
+    return date.toLocaleString('zh-CN')
+  }
+
+  const loadProject = async (projectId) => {
+    setProjectLoading(true)
+    try {
+      const data = await adminApi2.getProject(projectId)
+      setProject(data)
+    } catch (error) {
+      setProject(null)
+      toast.error(error.response?.data?.detail || '加载作品失败')
+    } finally {
+      setProjectLoading(false)
+    }
+  }
+
+  const loadSubmissions = async (projectId) => {
+    setSubmissionsLoading(true)
+    try {
+      const data = await projectApi.listSubmissions(projectId)
+      setSubmissions(data.items || [])
+    } catch (error) {
+      setSubmissions([])
+      toast.error(error.response?.data?.detail || '加载提交记录失败')
+    } finally {
+      setSubmissionsLoading(false)
+    }
+  }
+
+  const refreshAll = async () => {
+    if (!project?.id) return
+    await Promise.all([loadProject(project.id), loadSubmissions(project.id)])
+  }
+
+  const handleLoadProject = async () => {
+    const id = Number(projectIdInput)
+    if (!Number.isInteger(id) || id <= 0) {
+      toast.error('请输入有效的作品 ID')
+      return
+    }
+    await Promise.all([loadProject(id), loadSubmissions(id)])
+  }
+
+  const handleOfflineProject = async () => {
+    if (!project?.id) {
+      toast.error('请先加载作品')
+      return
+    }
+    setOfflineLoading(true)
+    try {
+      const message = actionMessage.trim() || undefined
+      await adminApi2.offlineProject(project.id, message)
+      toast.success('已下架作品')
+      await refreshAll()
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '下架失败')
+    } finally {
+      setOfflineLoading(false)
+    }
+  }
+
+  const handleRedeploy = async (submissionId) => {
+    setRedeployingId(submissionId)
+    try {
+      const message = actionMessage.trim() || undefined
+      await adminApi2.redeployProjectSubmission(submissionId, message)
+      toast.success('已触发重部署')
+      await refreshAll()
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '重部署失败')
+    } finally {
+      setRedeployingId(null)
+    }
+  }
+
+  const handleStop = async (submissionId) => {
+    setStoppingId(submissionId)
+    try {
+      const message = actionMessage.trim() || undefined
+      await adminApi2.stopProjectSubmission(submissionId, message)
+      toast.success('已触发停止')
+      await refreshAll()
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '停止失败')
+    } finally {
+      setStoppingId(null)
+    }
+  }
+
+  const handleViewLogs = async (submissionId) => {
+    setLogOpen(true)
+    setLogLoading(true)
+    setLogData(null)
+    try {
+      const data = await adminApi2.getProjectSubmissionLogs(submissionId)
+      setLogData(data)
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '加载日志失败')
+      setLogOpen(false)
+    } finally {
+      setLogLoading(false)
+    }
+  }
+
+  const renderStatusBadge = (status) => {
+    const label = STATUS_LABELS[status] || status || '-'
+    const style = STATUS_STYLES[status] || STATUS_STYLES.created
+    return (
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${style}`}>
+        {label}
+      </span>
+    )
+  }
+
+  const ownerName = project?.owner?.display_name || project?.owner?.username || (project?.user_id ? `用户#${project.user_id}` : '-')
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">作品部署管理</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              加载作品后可查看提交记录，并进行下架/重部署/停止
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={projectIdInput}
+              onChange={(e) => setProjectIdInput(e.target.value)}
+              placeholder="作品 ID"
+              className="w-32 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <button
+              onClick={handleLoadProject}
+              disabled={projectLoading}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              {projectLoading ? '加载中...' : '加载作品'}
+            </button>
+          </div>
+        </div>
+
+        {project && (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <div className="text-slate-500 mb-1">作品标题</div>
+                <div className="text-slate-900 dark:text-white font-medium">{project.title || '-'}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <div className="text-slate-500 mb-1">作者</div>
+                <div className="text-slate-900 dark:text-white font-medium">{ownerName}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <div className="text-slate-500 mb-1">作品状态</div>
+                <div className="text-slate-900 dark:text-white font-medium">{project.status}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-slate-500 mb-2">操作说明（可选）</div>
+                <textarea
+                  value={actionMessage}
+                  onChange={(e) => setActionMessage(e.target.value)}
+                  placeholder="例如：异常修复后重新部署"
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 resize-none"
+                />
+              </div>
+              <div className="flex items-end gap-3">
+                <button
+                  onClick={handleOfflineProject}
+                  disabled={offlineLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  {offlineLoading ? '下架中...' : '下架作品'}
+                </button>
+                <button
+                  onClick={refreshAll}
+                  disabled={submissionsLoading || !project?.id}
+                  className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                  <RefreshCw className={`w-4 h-4 ${submissionsLoading ? 'animate-spin' : ''}`} />
+                  刷新提交
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">提交记录</h3>
+        </div>
+
+        {!project ? (
+          <div className="text-sm text-slate-500">请先加载作品</div>
+        ) : submissionsLoading ? (
+          <div className="text-sm text-slate-500 flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            加载中...
+          </div>
+        ) : submissions.length === 0 ? (
+          <div className="text-sm text-slate-500">暂无提交记录</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800">
+                <tr>
+                  <th className="px-4 py-3 text-left text-slate-600">提交ID</th>
+                  <th className="px-4 py-3 text-left text-slate-600">状态</th>
+                  <th className="px-4 py-3 text-left text-slate-600">镜像</th>
+                  <th className="px-4 py-3 text-left text-slate-600">域名</th>
+                  <th className="px-4 py-3 text-left text-slate-600">更新时间</th>
+                  <th className="px-4 py-3 text-right text-slate-600">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {submissions.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">
+                      #{item.id}
+                      {project.current_submission_id === item.id && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                          当前线上
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">{renderStatusBadge(item.status)}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono max-w-[260px] truncate" title={item.image_ref || ''}>
+                      {item.image_ref || '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.domain ? (
+                        <a
+                          href={item.domain.startsWith('http') ? item.domain : `https://${item.domain}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                        >
+                          访问
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                      {formatDateTime(item.updated_at || item.submitted_at)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => handleRedeploy(item.id)}
+                          disabled={redeployingId === item.id}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
+                        >
+                          <Play className="w-3 h-3" />
+                          {redeployingId === item.id ? '重部署中' : '重部署'}
+                        </button>
+                        <button
+                          onClick={() => handleStop(item.id)}
+                          disabled={stoppingId === item.id}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 disabled:opacity-50"
+                        >
+                          <Square className="w-3 h-3" />
+                          {stoppingId === item.id ? '停止中' : '停止'}
+                        </button>
+                        <button
+                          onClick={() => handleViewLogs(item.id)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <Eye className="w-3 h-3" />
+                          日志
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {logOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !logLoading && setLogOpen(false)} />
+          <div className="relative z-10 w-full max-w-3xl mx-4 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">提交日志</h3>
+              <button
+                type="button"
+                onClick={() => setLogOpen(false)}
+                disabled={logLoading}
+                className="text-slate-500 hover:text-slate-700"
+              >
+                关闭
+              </button>
+            </div>
+            {logLoading ? (
+              <div className="text-sm text-slate-500 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                加载中...
+              </div>
+            ) : (
+              <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                    <div className="text-slate-500 mb-1">状态</div>
+                    <div className="text-slate-900 dark:text-white">{logData?.status || '-'}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                    <div className="text-slate-500 mb-1">错误码</div>
+                    <div className="text-slate-900 dark:text-white">{logData?.error_code || '-'}</div>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                  <div className="text-slate-500 mb-2">日志内容</div>
+                  <pre className="whitespace-pre-wrap break-words text-xs text-slate-900 dark:text-slate-100 font-mono max-h-[360px] overflow-auto">
+                    {logData?.log || '暂无日志'}
+                  </pre>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -5659,7 +6035,7 @@ function AnnouncementPanel() {
 }
 
 // 有效的 Tab 列表
-const VALID_TABS = ['dashboard', 'users', 'review-assign', 'signin', 'lottery', 'activity', 'apikeys', 'apimonitor', 'prediction', 'logs', 'announcements']
+const VALID_TABS = ['dashboard', 'users', 'review-assign', 'project-deploy', 'signin', 'lottery', 'activity', 'apikeys', 'apimonitor', 'prediction', 'logs', 'announcements']
 
 // 主页面
 export default function AdminDashboardPage() {
@@ -5732,6 +6108,7 @@ export default function AdminDashboardPage() {
             <Tab active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} icon={BarChart3}>仪表盘</Tab>
             <Tab active={activeTab === 'users'} onClick={() => handleTabChange('users')} icon={Users}>用户</Tab>
             <Tab active={activeTab === 'review-assign'} onClick={() => handleTabChange('review-assign')} icon={ClipboardCheck}>评审分配</Tab>
+            <Tab active={activeTab === 'project-deploy'} onClick={() => handleTabChange('project-deploy')} icon={Play}>部署管理</Tab>
             <Tab active={activeTab === 'signin'} onClick={() => handleTabChange('signin')} icon={Calendar}>签到</Tab>
             <Tab active={activeTab === 'lottery'} onClick={() => handleTabChange('lottery')} icon={Gift}>抽奖</Tab>
             <Tab active={activeTab === 'activity'} onClick={() => handleTabChange('activity')} icon={Zap}>活动</Tab>
@@ -5748,6 +6125,7 @@ export default function AdminDashboardPage() {
           {activeTab === 'dashboard' && <DashboardPanel />}
           {activeTab === 'users' && <UsersPanel />}
           {activeTab === 'review-assign' && <ProjectReviewAssignPanel />}
+          {activeTab === 'project-deploy' && <ProjectDeployPanel />}
           {activeTab === 'signin' && <SigninConfigPanel />}
           {activeTab === 'lottery' && <ActivityConfigPanel />}
           {activeTab === 'activity' && <ActivityConfigPanel />}

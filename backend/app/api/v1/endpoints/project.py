@@ -2,6 +2,7 @@
 作品与部署提交相关 API
 """
 from datetime import datetime, time
+import json
 import logging
 from typing import Optional, Tuple
 
@@ -51,6 +52,31 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 ALLOWED_REGISTRIES = {"ghcr.io", "docker.io"}
+
+
+async def enqueue_worker_action(action: str, submission_id: int) -> None:
+    """提交 Worker 任务"""
+    payload = json.dumps(
+        {"action": action, "submission_id": submission_id},
+        ensure_ascii=False,
+    )
+    redis_client = None
+    try:
+        redis_client = await get_redis()
+        await redis_client.rpush(settings.WORKER_QUEUE_KEY, payload)
+    except Exception as exc:
+        logger.warning(
+            "任务入队失败: action=%s, submission_id=%s, error=%s",
+            action,
+            submission_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="任务入队失败，请稍后重试",
+        ) from exc
+    finally:
+        await close_redis(redis_client)
 
 
 def require_admin(user: User) -> None:
@@ -982,6 +1008,7 @@ async def admin_offline_project(
         )
         submission = result.scalar_one_or_none()
         if submission:
+            await enqueue_worker_action("stop", submission.id)
             submission.status = ProjectSubmissionStatus.FAILED.value
             submission.status_message = payload.message or "管理员下架"
             submission.error_code = "admin_offline"
@@ -1022,6 +1049,8 @@ async def admin_redeploy_submission(
     submission = result.scalar_one_or_none()
     if submission is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="提交记录不存在")
+
+    await enqueue_worker_action("deploy", submission.id)
 
     now = datetime.utcnow()
     submission.status = ProjectSubmissionStatus.QUEUED.value
@@ -1066,6 +1095,8 @@ async def admin_stop_submission(
     submission = result.scalar_one_or_none()
     if submission is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="提交记录不存在")
+
+    await enqueue_worker_action("stop", submission.id)
 
     now = datetime.utcnow()
     submission.status = ProjectSubmissionStatus.FAILED.value
