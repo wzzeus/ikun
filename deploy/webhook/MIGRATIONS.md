@@ -1,6 +1,7 @@
 # 数据库迁移自动化
 
-部署脚本现在会在每次部署时自动执行数据库迁移，确保数据库 schema 与代码保持同步。
+默认由后端容器启动时自动执行数据库迁移（`AUTO_MIGRATE=true`），确保数据库 schema 与代码保持同步。
+如需仍由 `deploy/webhook/deploy.sh` 执行迁移，可设置 `AUTO_MIGRATE=false`。
 
 ## 工作原理
 
@@ -8,9 +9,9 @@
 
 **当数据库为空时**，自动导入 `backend/sql/production_clean_db.sql`：
 
-- ✅ 50个表结构
-- ✅ 配置数据（比赛、成就、任务、抽奖、扭蛋、积分商城等）
-- ✅ 示例报名项目（API Key Tool，包含完整的 GitHub 仓库和 API Key）
+- 50个表结构
+- 配置数据（比赛、成就、任务、抽奖、扭蛋、积分商城等）
+- 示例报名项目（API Key Tool，包含完整的 GitHub 仓库和 API Key）
 
 **兼容性**：如果找不到 `production_clean_db.sql`，会回退到旧方式：
 1. 执行 `schema.sql`（表结构）
@@ -31,9 +32,9 @@ CREATE TABLE schema_migrations (
 );
 ```
 
-### 3. 执行流程
+### 3. 执行流程（AUTO_MIGRATE=true）
 
-部署脚本会在**容器重启后、健康检查前**自动执行：
+后端容器 entrypoint 在启动时自动执行，部署脚本仅负责触发重建并等待健康检查：
 
 1. 等待 MySQL 就绪（最多 30 秒）
 2. 检查数据库表数量
@@ -41,14 +42,15 @@ CREATE TABLE schema_migrations (
    - **如果 > 0** → 跳过初始化
 3. 创建 `schema_migrations` 表（如果不存在）
 4. 获取文件锁（防止并发执行）
-5. 按文件序号顺序扫描 `backend/sql/[0-9][0-9][0-9]_*.sql`
-6. 对每个迁移文件：
+5. **若为首次初始化**：导入完成后自动将现有迁移标记为已执行，跳过增量迁移
+6. 按文件序号顺序扫描 `backend/sql/[0-9][0-9][0-9]_*.sql`
+7. 对每个迁移文件：
    - 计算 SHA256 校验和
    - 检查是否已执行（查询 `schema_migrations` 表）
    - 如已执行且校验和一致 → 跳过
    - 如已执行但校验和不一致 → 告警（文件可能被改动）
    - 如未执行 → 执行 SQL 并记录版本
-7. 释放文件锁
+8. 释放文件锁
 
 ### 4. 安全特性
 
@@ -76,7 +78,7 @@ tail -f /opt/chicken-king/deploy/webhook/logs/migrations.log
 cat /opt/chicken-king/deploy/webhook/logs/deploy.log
 
 # 或通过 Web 接口
-curl https://pk.ikuncode.cc/logs
+curl https://<your-domain>/logs
 ```
 
 ### 查询已执行的迁移
@@ -187,7 +189,7 @@ lsof /tmp/chicken_king_migrations.lock  # 查看哪个进程持有锁
 cd /opt/chicken-king
 
 # 手动执行迁移脚本（查看源码了解更多）
-# 注意：通常不需要手动执行，部署时会自动运行
+# 注意：默认由后端容器启动时自动执行；如需强制手动执行，请先临时将 AUTO_MIGRATE=false
 bash deploy/webhook/deploy.sh
 ```
 

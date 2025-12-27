@@ -1,6 +1,6 @@
 # GitHub Webhook 自动部署
 
-当你 `git push` 到 `main` 分支时，服务器会自动拉取代码、执行数据库迁移、重新部署，并发送微信通知。
+当你 `git push` 到 `main` 分支时，服务器会自动拉取代码、执行数据库迁移并重新部署；如配置 `WECHAT_PUSH_URL` 则发送微信通知。
 
 ## 服务器配置步骤
 
@@ -13,7 +13,7 @@ openssl rand -hex 32
 
 记住这个密钥，后面要用。
 
-### 2. 配置环境变量
+### 2. 配置 Webhook 环境变量
 
 ```bash
 cd /opt/chicken-king/deploy/webhook
@@ -23,7 +23,20 @@ cp .env.example .env
 nano .env
 ```
 
-### 3. 启动 Webhook 服务
+可选配置：
+- `WECHAT_PUSH_URL`：部署完成后的微信推送地址（不配置则不推送）
+
+### 3. 配置主项目 .env
+
+```bash
+cd /opt/chicken-king
+cp .env.production.example .env
+nano .env
+```
+
+> `deploy/webhook/deploy.sh` 部署时会检查 `.env`，缺失则复制模板并中断，请先填写真实配置。
+
+### 4. 启动 Webhook 服务
 
 ```bash
 cd /opt/chicken-king/deploy/webhook
@@ -38,7 +51,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-### 4. 配置 Nginx 反向代理
+### 5. 配置 Nginx 反向代理
 
 在 Nginx 配置中添加：
 
@@ -64,7 +77,7 @@ sudo nginx -t && sudo systemctl reload nginx
 1. 打开仓库：https://github.com/deijing/ikun
 2. 进入 **Settings** → **Webhooks** → **Add webhook**
 3. 填写配置：
-   - **Payload URL**: `https://pk.ikuncode.cc/webhook`
+   - **Payload URL**: `https://<your-domain>/webhook`
    - **Content type**: `application/json`
    - **Secret**: 填入你生成的密钥（与服务器 .env 中的一致）
    - **Which events**: 选择 `Just the push event`
@@ -75,12 +88,12 @@ sudo nginx -t && sudo systemctl reload nginx
 
 1. 检查 Webhook 服务状态：
 ```bash
-curl https://pk.ikuncode.cc/webhook/health
+curl https://<your-domain>/webhook/health
 ```
 
 2. 查看部署日志：
 ```bash
-curl https://pk.ikuncode.cc/logs
+curl https://<your-domain>/logs
 # 或者
 cat /opt/chicken-king/deploy/webhook/logs/deploy.log
 ```
@@ -131,8 +144,17 @@ bash deploy/webhook/deploy.sh
 - 详细迁移日志：`logs/migrations.log`
 - 详见：[MIGRATIONS.md](./MIGRATIONS.md)
 
-### 微信推送通知
-部署完成后自动推送微信消息，包含：
+### 微信推送通知（可选）
+配置 `WECHAT_PUSH_URL` 后才会推送，包含：
 - 部署时间
 - 环境信息
 - 健康检查状态
+
+---
+
+## 补充说明
+
+- 主项目 `.env` 需要配置 `WORKER_API_TOKEN`，用于 Worker 回写状态鉴权。
+- 生产 Nginx 证书需放在 `/opt/chicken-king/nginx/ssl`（`fullchain.pem` + `privkey.pem`）。
+- 首次部署会导入 `production_clean_db.sql` 并跳过增量迁移，请保证该文件为最新结构。
+

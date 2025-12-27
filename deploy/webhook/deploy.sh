@@ -5,7 +5,7 @@
 #
 # 工作流程：
 # 1. 拉取最新代码
-# 2. 自动生成生产环境配置（.env）
+# 2. 检查生产环境配置（.env）
 # 3. 重建 Docker 容器
 # 4. 执行数据库迁移（自动跟踪版本，避免重复执行）
 # 5. 健康检查
@@ -22,8 +22,8 @@ ENV_FILE="/opt/chicken-king/.env"
 MIGRATIONS_DIR="/opt/chicken-king/backend/sql"
 DB_CONTAINER="chicken_king_db"
 
-# 微信推送 URL（从环境变量读取，避免硬编码凭据）
-WECHAT_PUSH_URL="${WECHAT_PUSH_URL:-https://push.showdoc.com.cn/server/api/push/5409535da22b34bd6286f6e1caf4e9b41584836843}"
+# 微信推送 URL（从环境变量读取）
+WECHAT_PUSH_URL="${WECHAT_PUSH_URL:-}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
@@ -50,9 +50,9 @@ send_wechat_notification() {
         -d "{\"title\":\"$title\",\"content\":\"$content\"}" \
         --max-time 5 \
         -o /dev/null -w "%{http_code}" | grep -q "200"; then
-        log "✅ 微信推送发送成功"
+        log "微信推送发送成功"
     else
-        log "⚠️ 微信推送发送失败（不影响部署）"
+        log "微信推送发送失败（不影响部署）"
     fi
 }
 
@@ -95,7 +95,7 @@ wait_for_db() {
     log_migration "等待 MySQL 就绪..."
     while [ $retry -lt $max_retries ]; do
         if docker exec "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -uroot --silent' >/dev/null 2>&1; then
-            log_migration "✅ MySQL 已就绪"
+            log_migration "MySQL 已就绪"
             return 0
         fi
         retry=$((retry + 1))
@@ -103,7 +103,7 @@ wait_for_db() {
         sleep 2
     done
 
-    log_migration "❌ MySQL 未在预期时间内就绪"
+    log_migration "MySQL 未在预期时间内就绪"
     return 1
 }
 
@@ -113,9 +113,9 @@ ensure_database_exists() {
 
     # 使用 mysql 系统数据库连接，创建目标数据库
     if docker exec "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"' >/dev/null 2>&1; then
-        log_migration "✅ 数据库已就绪: \$MYSQL_DATABASE"
+        log_migration "数据库已就绪: \$MYSQL_DATABASE"
     else
-        log_migration "❌ 创建数据库失败"
+        log_migration "创建数据库失败"
         return 1
     fi
 }
@@ -153,10 +153,9 @@ validate_migration_filename() {
 run_migrations() {
     local files
     local lock_file="/tmp/chicken_king_migrations.lock"
-    local lock_fd
 
     if [ ! -d "$MIGRATIONS_DIR" ]; then
-        log_migration "⚠️ 迁移目录不存在，跳过: $MIGRATIONS_DIR"
+        log_migration "迁移目录不存在，跳过: $MIGRATIONS_DIR"
         return 0
     fi
 
@@ -172,15 +171,15 @@ run_migrations() {
 
     # 获取文件锁，防止并发执行（使用 flock）
     log_migration "尝试获取迁移锁: $lock_file"
-    exec {lock_fd}>"$lock_file"
-    if ! flock -n "$lock_fd"; then
-        log_migration "❌ 获取迁移锁失败（可能有另一个部署/迁移在运行）"
-        exec {lock_fd}>&-
+    exec 200>"$lock_file"
+    if ! flock -n 200; then
+        log_migration "获取迁移锁失败（可能有另一个部署/迁移在运行）"
+        exec 200>&-
         return 1
     fi
 
     # 确保退出时释放锁
-    trap "flock -u $lock_fd; exec {lock_fd}>&-" EXIT
+    trap "flock -u 200; exec 200>&-" EXIT
 
     # 检查是否需要执行初始数据库导入
     local table_count is_fresh_install
@@ -194,22 +193,22 @@ run_migrations() {
         # 优先使用 production_clean_db.sql（包含完整表结构 + 配置 + 示例数据）
         if [ -f "$MIGRATIONS_DIR/production_clean_db.sql" ]; then
             if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/production_clean_db.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
-                log_migration "✅ 初始数据库导入成功（包含表结构、配置数据、示例报名）"
+                log_migration "初始数据库导入成功（包含表结构、配置数据、示例报名）"
             else
-                log_migration "❌ 初始数据库导入失败（详见 $MIGRATION_LOG_FILE）"
+                log_migration "初始数据库导入失败（详见 $MIGRATION_LOG_FILE）"
                 return 1
             fi
         # 兼容旧方式：schema.sql + seed_production_config.sql
         elif [ -f "$MIGRATIONS_DIR/schema.sql" ]; then
-            log_migration "⚠️ 未找到 production_clean_db.sql，使用旧方式 schema.sql..."
+            log_migration "未找到 production_clean_db.sql，使用旧方式 schema.sql..."
             if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/schema.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
-                log_migration "✅ 基础 schema 执行成功"
+                log_migration "基础 schema 执行成功"
 
                 # 导入配置数据
                 if [ -f "$MIGRATIONS_DIR/seed_production_config.sql" ]; then
                     log_migration "导入配置数据..."
                     if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/seed_production_config.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
-                        log_migration "✅ 配置数据导入成功"
+                        log_migration "配置数据导入成功"
                     else
                         log_migration "⚠️ 配置数据导入失败（非致命错误）"
                     fi
@@ -228,6 +227,42 @@ run_migrations() {
 
     ensure_migrations_table
 
+    if [ "$is_fresh_install" = true ]; then
+        log_migration "初始库已导入，标记历史迁移为已执行..."
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ ! -f "$file" ] && continue
+
+            local base version version_num checksum existing_checksum
+            base="$(basename "$file")"
+            if ! validate_migration_filename "$base"; then
+                log_migration "跳过非法文件名: $base（仅允许：NNN_name.sql）"
+                continue
+            fi
+
+            version="${base%.sql}"
+            version_num="${version%%_*}"
+            version_num=$((10#$version_num))
+            checksum="$(sha256_file "$file")"
+            if [ "$checksum" = "unknown" ]; then
+                checksum="no-checksum"
+            fi
+
+            existing_checksum="$(db_query "SELECT checksum FROM schema_migrations WHERE version='$(sql_escape "$version")' LIMIT 1;")"
+            if [ -n "$existing_checksum" ]; then
+                continue
+            fi
+
+            db_exec "INSERT INTO schema_migrations (version, version_num, filename, checksum) VALUES ('$(sql_escape "$version")', $version_num, '$(sql_escape "$base")', '$(sql_escape "$checksum")');"
+        done <<< "$files"
+
+        log_migration "已同步迁移记录，跳过增量迁移"
+        trap - EXIT
+        flock -u 200 2>/dev/null || true
+        exec 200>&- 2>/dev/null || true
+        return 0
+    fi
+
     log_migration "========== 开始执行数据库迁移 =========="
     while IFS= read -r file; do
         [ -z "$file" ] && continue
@@ -238,7 +273,7 @@ run_migrations() {
 
         # 文件名白名单校验
         if ! validate_migration_filename "$base"; then
-            log_migration "⚠️ 跳过非法文件名: $base（仅允许：NNN_name.sql）"
+            log_migration "跳过非法文件名: $base（仅允许：NNN_name.sql）"
             continue
         fi
 
@@ -248,7 +283,7 @@ run_migrations() {
         checksum="$(sha256_file "$file")"
 
         if [ "$checksum" = "unknown" ]; then
-            log_migration "⚠️ 无法计算校验和: $base（sha256sum/shasum 不可用）"
+            log_migration "无法计算校验和: $base（sha256sum/shasum 不可用）"
             checksum="no-checksum"
         fi
 
@@ -256,39 +291,37 @@ run_migrations() {
         existing_checksum="$(db_query "SELECT checksum FROM schema_migrations WHERE version='$(sql_escape "$version")' LIMIT 1;")"
         if [ -n "$existing_checksum" ]; then
             if [ "$existing_checksum" != "$checksum" ] && [ "$checksum" != "no-checksum" ]; then
-                log_migration "⚠️ 已执行但校验和不一致（文件可能被改动）: $base"
-                log_migration "   数据库: $existing_checksum"
-                log_migration "   文件:   $checksum"
+                log_migration "已执行但校验和不一致（文件可能被改动）: $base"
+                log_migration " 数据库: $existing_checksum"
+                log_migration " 文件:   $checksum"
             else
-                log_migration "⏭️ 跳过已执行迁移: $base"
+                log_migration "跳过已执行迁移: $base"
             fi
             continue
         fi
 
         # 执行迁移
-        log_migration "➡️ 执行迁移: $base"
+        log_migration "执行迁移: $base"
         {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] === APPLY $base ==="
         } >> "$MIGRATION_LOG_FILE"
 
         if ! docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$MYSQL_DATABASE"' < "$file" >> "$MIGRATION_LOG_FILE" 2>&1; then
-            log_migration "❌ 迁移失败: $base（详见 $MIGRATION_LOG_FILE）"
+            log_migration "迁移失败: $base（详见 $MIGRATION_LOG_FILE）"
             return 1
         fi
 
         # 记录迁移版本
         db_exec "INSERT INTO schema_migrations (version, version_num, filename, checksum) VALUES ('$(sql_escape "$version")', $version_num, '$(sql_escape "$base")', '$(sql_escape "$checksum")');"
-        log_migration "✅ 迁移完成: $base"
+        log_migration "迁移完成: $base"
     done <<< "$files"
 
     log_migration "========== 数据库迁移完成 =========="
 
     # 清除 trap 并释放锁
     trap - EXIT
-    if [ -n "${lock_fd:-}" ]; then
-        flock -u "$lock_fd" 2>/dev/null || true
-        exec {lock_fd}>&- 2>/dev/null || true
-    fi
+    flock -u 200 2>/dev/null || true
+    exec 200>&- 2>/dev/null || true
 }
 
 # 检查必要的依赖命令
@@ -306,13 +339,17 @@ else
     DOCKER_COMPOSE="docker-compose"
 fi
 
+# Compose 文件（线上部署使用生产配置）
+COMPOSE_FILES="-f docker-compose.prod.yml"
+COMPOSE_CMD="$DOCKER_COMPOSE $COMPOSE_FILES"
+
 # 确保日志目录存在
 mkdir -p "$(dirname "$LOG_FILE")"
 mkdir -p "$(dirname "$MIGRATION_LOG_FILE")"
 touch "$LOG_FILE" "$MIGRATION_LOG_FILE"
 
 log "========== 开始部署 =========="
-log "使用命令: $DOCKER_COMPOSE"
+log "使用命令: $COMPOSE_CMD"
 
 cd "$PROJECT_DIR"
 
@@ -334,71 +371,42 @@ if [ "$SCRIPT_VERSION_BEFORE" != "$SCRIPT_VERSION_AFTER" ] && [ "$SCRIPT_VERSION
     exec bash "$0" "$@"
 fi
 
-# 2. 生成生产环境配置
-log "生成生产环境配置..."
+# 2. 检查生产环境配置
+log "检查生产环境配置..."
 
-# 保留现有密码（如果 .env 文件已存在）
 EXISTING_MYSQL_ROOT_PASSWORD=""
 EXISTING_MYSQL_PASSWORD=""
 if [ -f "$ENV_FILE" ]; then
     EXISTING_MYSQL_ROOT_PASSWORD=$(grep "^MYSQL_ROOT_PASSWORD=" "$ENV_FILE" | cut -d'=' -f2-)
     EXISTING_MYSQL_PASSWORD=$(grep "^MYSQL_PASSWORD=" "$ENV_FILE" | cut -d'=' -f2-)
+    log "已检测到 .env，跳过自动生成"
+else
+    if [ -f "$PROJECT_DIR/.env.production.example" ]; then
+        cp "$PROJECT_DIR/.env.production.example" "$ENV_FILE"
+        log "未检测到 .env，已复制 .env.production.example，请填写后重试"
+    else
+        log "未检测到 .env 且缺少 .env.production.example，无法继续部署"
+    fi
+    exit 1
 fi
 
-# 使用现有密码或默认密码
+# 使用现有密码或默认密码（用于迁移连接）
 MYSQL_ROOT_PASSWORD="${EXISTING_MYSQL_ROOT_PASSWORD:-password}"
 MYSQL_PASSWORD="${EXISTING_MYSQL_PASSWORD:-password}"
+AUTO_MIGRATE_FLAG="$(grep "^AUTO_MIGRATE=" "$ENV_FILE" | cut -d'=' -f2- | tr '[:upper:]' '[:lower:]')"
+AUTO_MIGRATE_FLAG="${AUTO_MIGRATE_FLAG:-false}"
 
-# 先写入固定内容的模板
-cat > "$ENV_FILE" << 'ENVEOF'
-# ============================================================================
-# 生产环境配置 - 由部署脚本自动生成
-# ============================================================================
-
-# MySQL 数据库（注意：修改密码需要删除 mysql 数据卷重建）
-MYSQL_ROOT_PASSWORD=__MYSQL_ROOT_PASSWORD__
-MYSQL_DATABASE=chicken_king
-MYSQL_USER=chicken
-MYSQL_PASSWORD=__MYSQL_PASSWORD__
-
-# 应用密钥（用于 JWT 签名）
-SECRET_KEY=a3f8c9d2e5b7a1f4c8d0e3b6a9f2c5d8e1b4a7f0c3d6e9b2a5f8c1d4e7b0a3f6
-
-# 前端 URL
-FRONTEND_URL=https://pk.ikuncode.cc
-
-# Linux.do OAuth
-LINUX_DO_CLIENT_ID=ZFdemXAFDfy9mQfCI1tsOTyzBEKJYXT1
-LINUX_DO_CLIENT_SECRET=xSAW4rhOyz6ejc9xrflf4XeRYY39Etex
-LINUX_DO_REDIRECT_URI=https://pk.ikuncode.cc/api/v1/auth/linuxdo/callback
-
-# GitHub OAuth
-GITHUB_CLIENT_ID=Ov23liWnv2Zcv4FPoi3H
-GITHUB_CLIENT_SECRET=205aa31cc830ea3ed5f9f5cc5edbe9b61c9c59ca
-GITHUB_REDIRECT_URI=https://pk.ikuncode.cc/api/v1/auth/github/callback
-
-# 前端 API URL（生产环境使用相对路径）
-VITE_API_URL=/api/v1
-
-# Umami 统计
-UMAMI_APP_SECRET=chicken_king_umami_secret_2024
-ENVEOF
-
-# 使用 sed 安全地替换密码（避免特殊字符问题）
-# 使用 @ 作为分隔符而不是 / 以避免密码中的 / 字符冲突
-sed -i.bak "s@__MYSQL_ROOT_PASSWORD__@${MYSQL_ROOT_PASSWORD}@g" "$ENV_FILE"
-sed -i.bak "s@__MYSQL_PASSWORD__@${MYSQL_PASSWORD}@g" "$ENV_FILE"
-rm -f "${ENV_FILE}.bak"
-
-log "✅ 生产环境配置已生成"
-
-# 3. 重启容器（代码已通过 volume 挂载，无需重新构建）
-log "重启容器以应用最新代码..."
-$DOCKER_COMPOSE up -d
+# 3. 重建并重启容器
+log "重建并重启容器以应用最新代码..."
+$COMPOSE_CMD up -d --build
 
 # 4. 容器重启后执行数据库迁移（健康检查前）
-log "执行数据库迁移..."
-run_migrations
+if [ "$AUTO_MIGRATE_FLAG" = "true" ]; then
+    log "检测到 AUTO_MIGRATE=true，跳过 deploy.sh 内置迁移"
+else
+    log "执行数据库迁移..."
+    run_migrations
+fi
 
 # 5. 等待服务启动并健康检查
 log "等待服务启动..."
@@ -412,7 +420,7 @@ HEALTH_OK=false
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # 检查后端 API
     if curl -s http://localhost:8000/docs > /dev/null 2>&1; then
-        log "✅ 后端服务正常"
+        log "后端服务正常"
         HEALTH_OK=true
         break
     fi
@@ -422,14 +430,14 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 if [ "$HEALTH_OK" = false ]; then
-    log "⚠️ 后端服务可能还在启动中"
+    log "后端服务可能还在启动中"
 fi
 
 # 检查前端
 if curl -s http://localhost:5174/health > /dev/null 2>&1; then
-    log "✅ 前端服务正常"
+    log "前端服务正常"
 else
-    log "⚠️ 前端健康检查未响应（可能正常，nginx 会代理）"
+    log "前端健康检查未响应（可能正常，nginx 会代理）"
 fi
 
 # 6. 清理旧镜像

@@ -1,4 +1,4 @@
--- MySQL dump 10.13  Distrib 8.0.43, for macos13.7 (arm64)
+﻿-- MySQL dump 10.13  Distrib 8.0.43, for macos13.7 (arm64)
 --
 -- Host: localhost    Database: chicken_king
 -- ------------------------------------------------------
@@ -300,6 +300,12 @@ CREATE TABLE `contests` (
   `updated_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   `title` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '比赛标题',
   `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '比赛描述',
+  `visibility` enum('draft','published','hidden') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'published' COMMENT 'Contest visibility',
+  `banner_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Contest banner url',
+  `rules_md` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'Contest rules markdown',
+  `prizes_md` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'Contest prizes markdown',
+  `review_rules_md` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'Contest review rules markdown',
+  `faq_md` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT 'Contest faq markdown',
   `phase` enum('upcoming','signup','submission','voting','ended') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'upcoming' COMMENT '比赛阶段',
   `signup_start` datetime DEFAULT NULL COMMENT '报名开始时间',
   `signup_end` datetime DEFAULT NULL COMMENT '报名结束时间',
@@ -307,6 +313,7 @@ CREATE TABLE `contests` (
   `submit_end` datetime DEFAULT NULL COMMENT '提交结束时间',
   `vote_start` datetime DEFAULT NULL COMMENT '投票开始时间',
   `vote_end` datetime DEFAULT NULL COMMENT '投票结束时间',
+  `auto_phase_enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Auto phase sync',
   PRIMARY KEY (`id`),
   KEY `ix_contests_phase` (`phase`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='比赛表';

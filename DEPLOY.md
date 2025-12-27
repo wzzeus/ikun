@@ -5,14 +5,16 @@
 ```
 鸡王争霸赛/
 ├── docker-compose.prod.yml    # 生产环境编排
-├── .env.production.example    # 环境变量模板
+├── .env.production.example    # 环境变量模板（复制为 .env）
+├── deploy/
+│   └── webhook/               # GitHub Webhook 自动部署
 ├── nginx/
 │   ├── nginx.prod.conf        # Nginx 反向代理配置
 │   ├── ssl/                   # SSL 证书目录
 │   └── logs/                  # Nginx 日志
 ├── backend/
 │   ├── Dockerfile.prod        # 后端生产镜像
-│   └── sql/init/              # 数据库初始化脚本
+│   └── sql/                   # 数据库迁移脚本
 └── frontend/
     ├── Dockerfile.prod        # 前端生产镜像
     └── nginx.conf             # 前端容器 Nginx 配置
@@ -43,10 +45,10 @@ cd chicken-king
 
 ```bash
 # 复制模板
-cp .env.production.example .env.production
+cp .env.production.example .env
 
 # 编辑配置（重要！）
-nano .env.production
+nano .env
 ```
 
 **必须修改的配置项：**
@@ -61,15 +63,17 @@ nano .env.production
 | `LINUX_DO_CLIENT_SECRET` | Linux.do OAuth | 从 connect.linux.do 获取 |
 | `LINUX_DO_REDIRECT_URI` | OAuth 回调地址 | `https://your-domain.com/api/v1/auth/linuxdo/callback` |
 
-### 3.5 数据库迁移（重要）
+### 3.5 数据库迁移（自动）
 
-- 新增互动表迁移：`backend/sql/029_project_interactions.sql`
-- 若使用 `production_clean_db.sql` 或 `production_initial_db.sql` 初始化，无需额外执行
-- 旧库升级时需手动执行该迁移脚本
+生产环境默认启用自动迁移（`AUTO_MIGRATE=true`），后端容器启动时会：
+- 空库导入 `backend/sql/production_clean_db.sql`（或回退 `schema.sql` + `seed_production_config.sql`）
+- 旧库按 `backend/sql/NNN_*.sql` 增量执行
+
+如旧库已存在历史迁移但无 `schema_migrations`，可在 `.env` 设置 `MIGRATION_BASELINE_VERSION=XXX` 作为基线。
 
 ### 3.6 部署前检查清单
 
-- `.env.production` 已更新必要配置
+- `.env` 已更新必要配置
 - Nginx 证书与域名解析已准备
 - 数据库迁移脚本已执行或初始化脚本已替换
 
@@ -126,13 +130,13 @@ server {
 
 ```bash
 # 构建并启动所有服务
-docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 
 # 查看服务状态
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 
 # 查看日志
-docker-compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
 ### 6. 验证部署
@@ -142,11 +146,11 @@ docker-compose -f docker-compose.prod.yml logs -f
 curl http://localhost/health
 
 # 检查 API
-curl http://localhost/api/v1/health
+curl http://localhost/api/v1/contests/
 
 # 查看各服务日志
-docker-compose -f docker-compose.prod.yml logs backend
-docker-compose -f docker-compose.prod.yml logs nginx
+docker compose -f docker-compose.prod.yml logs backend
+docker compose -f docker-compose.prod.yml logs nginx
 ```
 
 ## 常用运维命令
@@ -155,14 +159,14 @@ docker-compose -f docker-compose.prod.yml logs nginx
 
 ```bash
 # 停止服务
-docker-compose -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml down
 
 # 重启单个服务
-docker-compose -f docker-compose.prod.yml restart backend
+docker compose -f docker-compose.prod.yml restart backend
 
 # 更新部署
 git pull
-docker-compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 
 # 查看资源使用
 docker stats
@@ -198,7 +202,7 @@ tail -f nginx/logs/error.log
 
 ```bash
 # 使用 analytics profile 启动
-docker-compose -f docker-compose.prod.yml --env-file .env.production --profile analytics up -d
+docker compose -f docker-compose.prod.yml --profile analytics up -d
 
 # Umami 默认访问地址
 # http://your-domain.com:3001
@@ -222,8 +226,8 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production --profile a
    sudo apt update && sudo apt upgrade -y
 
    # 更新 Docker 镜像
-   docker-compose -f docker-compose.prod.yml pull
-   docker-compose -f docker-compose.prod.yml up -d
+   docker compose -f docker-compose.prod.yml pull
+   docker compose -f docker-compose.prod.yml up -d
    ```
 
 3. **数据备份**
@@ -240,7 +244,7 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production --profile a
 
    # 复制新证书
    sudo cp /etc/letsencrypt/live/your-domain.com/*.pem nginx/ssl/
-   docker-compose -f docker-compose.prod.yml restart nginx
+   docker compose -f docker-compose.prod.yml restart nginx
    ```
 
 ## 故障排除
@@ -252,7 +256,7 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production --profile a
 sudo netstat -tlnp | grep -E '80|443|8000|3306'
 
 # 检查 Docker 日志
-docker-compose -f docker-compose.prod.yml logs --tail=100
+docker compose -f docker-compose.prod.yml logs --tail=100
 ```
 
 ### 数据库连接失败

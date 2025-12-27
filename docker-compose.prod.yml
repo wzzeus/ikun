@@ -22,7 +22,6 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./backend/sql/init:/docker-entrypoint-initdb.d:ro
     command: >
       --default-authentication-plugin=mysql_native_password
       --character-set-server=utf8mb4
@@ -105,6 +104,7 @@ services:
       - DATABASE_URL=mysql+aiomysql://${MYSQL_USER:-chicken}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-chicken_king}?charset=utf8mb4
       - REDIS_URL=redis://redis:6379/0
       - WORKER_API_BASE_URL=http://backend:8000
+      - AUTO_MIGRATE=false
     depends_on:
       db:
         condition: service_healthy

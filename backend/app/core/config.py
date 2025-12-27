@@ -120,9 +120,9 @@ class Settings(BaseSettings):
     WORKER_DOCKER_HOST: str = "unix:///var/run/docker.sock"  # Docker 连接地址
     WORKER_DEPLOY_NETWORK: Optional[str] = None  # 部署容器使用的网络（为空则自动探测）
     WORKER_PROJECT_PORT: int = 8080  # 作品容器对内端口
-    WORKER_CONTAINER_MEMORY_LIMIT: str = "1g"  # 作品容器内存上限
-    WORKER_CONTAINER_CPU_LIMIT: float = 1.0  # 作品容器 CPU 上限（核数）
-    WORKER_CONTAINER_PIDS_LIMIT: int = 256  # 作品容器进程数上限
+    WORKER_CONTAINER_MEMORY_LIMIT: str = "512m"  # 作品容器内存上限
+    WORKER_CONTAINER_CPU_LIMIT: float = 0.5  # 作品容器 CPU 上限（核数）
+    WORKER_CONTAINER_PIDS_LIMIT: int = 128  # 作品容器进程数上限
     WORKER_CONTAINER_LOG_MAX_SIZE: str = "10m"  # 作品容器日志单文件上限
     WORKER_CONTAINER_LOG_MAX_FILE: int = 3  # 作品容器日志文件数量
 

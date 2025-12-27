@@ -29,6 +29,7 @@ WORKDIR /app
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    default-mysql-client \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash appuser
 
@@ -41,7 +42,8 @@ COPY --chown=appuser:appuser . .
 
 # 预创建媒体目录，避免首次挂载权限问题
 RUN mkdir -p /app/app/uploads/media \
-    && chown -R appuser:appuser /app/app/uploads
+    && chown -R appuser:appuser /app/app/uploads \
+    && chmod +x /app/scripts/entrypoint.sh /app/scripts/run_migrations.sh
 
 # 切换到非 root 用户
 USER appuser
@@ -53,5 +55,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # 暴露端口
 EXPOSE 8000
 
+# 启动前执行迁移
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+
 # 生产环境启动命令（使用 gunicorn + uvicorn workers）
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips", "*"]
