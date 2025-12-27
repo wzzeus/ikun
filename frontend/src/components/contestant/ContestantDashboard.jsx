@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import api from '@/services/api'
 import ParticipantDetailModal from '@/components/participant/ParticipantDetailModal'
+import { useContestId } from '@/hooks/useContestId'
 import {
   CheckCircle2,
   Clock,
@@ -341,6 +342,7 @@ export default function ContestantDashboard({ className }) {
   const status = useRegistrationStore((s) => s.status)
   const checkStatus = useRegistrationStore((s) => s.checkStatus)
   const openModal = useRegistrationStore((s) => s.openModal)
+  const { contestId } = useContestId()
 
   const [githubStats, setGithubStats] = useState(null)
   const [quotaData, setQuotaData] = useState(null)
@@ -349,12 +351,12 @@ export default function ContestantDashboard({ className }) {
 
   // 检查报名状态
   useEffect(() => {
-    if (user) {
-      checkStatus(1).finally(() => setLoading(false))
+    if (user?.role === 'contestant') {
+      checkStatus(contestId).finally(() => setLoading(false))
     } else {
       setLoading(false)
     }
-  }, [user, checkStatus])
+  }, [user, checkStatus, contestId])
 
   // 加载额外数据
   useEffect(() => {

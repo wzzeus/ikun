@@ -13,6 +13,8 @@ export const authApi = {
   setPassword: (data) => api.post('/auth/password/set', data),
   bindLinuxDo: (data) => api.post('/auth/linuxdo/bind', data),
   bindGitHub: (data) => api.post('/auth/github/bind', data),
+  confirmLinuxDoMerge: () => api.post('/auth/linuxdo/merge/confirm'),
+  cancelLinuxDoMerge: () => api.post('/auth/linuxdo/merge/cancel'),
 }
 
 /**

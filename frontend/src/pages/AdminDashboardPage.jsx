@@ -900,6 +900,8 @@ function UsersPanel() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all') // 角色筛选
   const [editingUser, setEditingUser] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editForm, setEditForm] = useState({ username: '', display_name: '', email: '' })
   const [roleDropdown, setRoleDropdown] = useState(null)
   const [pointsModal, setPointsModal] = useState(null)
   const [pointsAmount, setPointsAmount] = useState('')
@@ -966,6 +968,52 @@ function UsersPanel() {
       loadUsers()
     } catch (error) {
       toast.error(error.response?.data?.detail || '调整失败')
+    }
+  }
+
+  const openEditUser = (user) => {
+    setEditingUser(user)
+    setEditForm({
+      username: user.username || '',
+      display_name: user.display_name || '',
+      email: user.email || '',
+    })
+  }
+
+  const handleSaveUserEdit = async () => {
+    if (!editingUser) return
+    const username = editForm.username.trim()
+    if (!username) {
+      toast.error('用户名不能为空')
+      return
+    }
+    const displayName = editForm.display_name?.trim() || null
+    const emailValue = editForm.email?.trim().toLowerCase() || null
+    const payload = {}
+    if (username !== editingUser.username) {
+      payload.username = username
+    }
+    if ((editingUser.display_name || null) !== displayName) {
+      payload.display_name = displayName
+    }
+    if ((editingUser.email || null) !== emailValue) {
+      payload.email = emailValue
+    }
+    if (Object.keys(payload).length === 0) {
+      toast.warning('未检测到可更新内容')
+      setEditingUser(null)
+      return
+    }
+    setEditSaving(true)
+    try {
+      await adminApi2.updateUser(editingUser.id, payload)
+      toast.success('用户资料已更新')
+      setEditingUser(null)
+      loadUsers()
+    } catch (error) {
+      toast.error(error.response?.data?.detail || '更新失败')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -1116,6 +1164,13 @@ function UsersPanel() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
+                        onClick={() => openEditUser(user)}
+                        className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                        title="编辑资料"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => setPointsModal(user)}
                         className="p-1.5 text-slate-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 rounded transition-colors"
                         title="调整积分"
@@ -1192,6 +1247,68 @@ function UsersPanel() {
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
               >
                 确认调整
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !editSaving && setEditingUser(null)} />
+          <div className="relative bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
+              编辑用户 - {editingUser.display_name || editingUser.username}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  用户名
+                </label>
+                <input
+                  type="text"
+                  value={editForm.username}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, username: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  昵称
+                </label>
+                <input
+                  type="text"
+                  value={editForm.display_name}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, display_name: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  邮箱
+                </label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditingUser(null)}
+                className="flex-1 px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                disabled={editSaving}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveUserEdit}
+                disabled={editSaving}
+                className={`flex-1 px-4 py-2 text-white rounded-lg ${editSaving ? 'bg-slate-400' : 'bg-blue-500 hover:bg-blue-600'}`}
+              >
+                {editSaving ? '保存中...' : '保存'}
               </button>
             </div>
           </div>

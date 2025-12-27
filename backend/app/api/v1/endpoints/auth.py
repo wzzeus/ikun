@@ -12,7 +12,7 @@ from secrets import token_urlsafe
 from typing import Optional
 from urllib.parse import urlencode, quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy import select, or_, update
@@ -88,7 +88,7 @@ def _validate_password_value(value: str) -> str:
     if re.search(r"\s", value):
         raise ValueError("密码不能包含空白字符")
     if len(value.encode("utf-8")) > 72:
-        raise ValueError("密码长度不能超过 72 字节")
+        raise ValueError("密码长度过长")
     return value
 
 
@@ -415,7 +415,7 @@ async def _apply_github_profile(
 class RegisterRequest(BaseModel):
     """本地注册请求"""
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., min_length=8)
     email: Optional[EmailStr] = None
     display_name: Optional[str] = Field(None, max_length=100)
 
@@ -448,7 +448,7 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     account: str = Field(..., alias="username", min_length=2, max_length=255)
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., min_length=8)
 
     @field_validator("account")
     @classmethod
@@ -472,7 +472,7 @@ class PasswordForgotRequest(BaseModel):
 class PasswordResetRequest(BaseModel):
     """密码重置请求"""
     token: str = Field(..., min_length=10, max_length=255)
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., min_length=8)
 
     @field_validator("password")
     @classmethod
@@ -482,8 +482,8 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordChangeRequest(BaseModel):
     """修改密码请求"""
-    old_password: str = Field(..., min_length=8, max_length=72)
-    new_password: str = Field(..., min_length=8, max_length=72)
+    old_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=8)
 
     @field_validator("old_password", "new_password")
     @classmethod
@@ -493,7 +493,7 @@ class PasswordChangeRequest(BaseModel):
 
 class PasswordSetRequest(BaseModel):
     """设置密码请求（OAuth 用户）"""
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., min_length=8)
 
     @field_validator("password")
     @classmethod
@@ -1033,7 +1033,30 @@ async def linuxdo_callback(
         result = await db.execute(select(User).where(User.linux_do_id == linux_do_id))
         existing_user = result.scalar_one_or_none()
         if existing_user and existing_user.id != target_user.id:
-            await merge_users(db, target_user, existing_user)
+            frontend = settings.FRONTEND_URL.rstrip("/")
+            redirect_to = f"{frontend}/account/security?merge=linuxdo"
+            resp = RedirectResponse(url=redirect_to, status_code=status.HTTP_302_FOUND)
+            is_secure = not settings.DEBUG
+            resp.set_cookie(
+                "linuxdo_merge_source",
+                str(existing_user.id),
+                httponly=True,
+                samesite="none" if settings.DEBUG else "lax",
+                secure=is_secure,
+                max_age=600,
+            )
+            resp.set_cookie(
+                "linuxdo_merge_target",
+                str(target_user.id),
+                httponly=True,
+                samesite="none" if settings.DEBUG else "lax",
+                secure=is_secure,
+                max_age=600,
+            )
+            resp.delete_cookie("linuxdo_oauth_state")
+            resp.delete_cookie("linuxdo_oauth_next")
+            resp.delete_cookie("linuxdo_bind_user")
+            return resp
 
         await _apply_linuxdo_profile(target_user, userinfo)
         await db.commit()
@@ -1065,7 +1088,6 @@ async def linuxdo_callback(
 
     if next_path:
         redirect_to += f"&next={next_path}"
-
     # 附加用户信息（base64 编码）
     redirect_to += "&user=" + _b64url_json({
         "id": user.id,
@@ -1091,6 +1113,59 @@ async def linuxdo_callback(
 
 
 # ==================== GitHub OAuth2 ====================
+
+@router.post("/linuxdo/merge/confirm", response_model=UserResponse, summary="确认合并 Linux.do 账号")
+async def linuxdo_merge_confirm(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_dep),
+):
+    """
+    确认合并 Linux.do 账号
+
+    仅在绑定流程中检测到冲突时使用。
+    """
+    source_id = request.cookies.get("linuxdo_merge_source")
+    target_id = request.cookies.get("linuxdo_merge_target")
+    if not source_id or not target_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="没有待确认的合并请求",
+        )
+    if str(current_user.id) != str(target_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="合并请求与当前账号不匹配",
+        )
+
+    source_user = await db.get(User, int(source_id))
+    if source_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="待合并账号不存在",
+        )
+
+    await merge_users(db, current_user, source_user)
+    await db.commit()
+    await db.refresh(current_user)
+
+    response.delete_cookie("linuxdo_merge_source")
+    response.delete_cookie("linuxdo_merge_target")
+    return current_user
+
+
+@router.post("/linuxdo/merge/cancel", summary="取消合并 Linux.do 账号")
+async def linuxdo_merge_cancel(
+    response: Response,
+    current_user: User = Depends(get_current_user_dep),
+):
+    """
+    取消 Linux.do 账号合并请求
+    """
+    response.delete_cookie("linuxdo_merge_source")
+    response.delete_cookie("linuxdo_merge_target")
+    return {"ok": True}
 
 @router.get("/github/login")
 async def github_login(request: Request, next: Optional[str] = None):

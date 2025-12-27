@@ -3,6 +3,7 @@
 """
 from datetime import datetime
 from typing import Iterable
+import logging
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,15 @@ ACHIEVEMENT_PRIORITY = {
     "unlocked": 1,
     "claimed": 2,
 }
+
+logger = logging.getLogger(__name__)
+
+
+async def _get_existing_tables(db: AsyncSession) -> set[str]:
+    result = await db.execute(
+        text("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()")
+    )
+    return {row[0] for row in result.fetchall()}
 
 
 def _pick_role(target_role: str, source_role: str) -> str:
@@ -186,6 +196,11 @@ async def merge_users(db: AsyncSession, target_user: User, source_user: User) ->
     if target_user.id == source_user.id:
         return target_user
 
+    existing_tables = await _get_existing_tables(db)
+
+    def has_table(name: str) -> bool:
+        return name in existing_tables
+
     # 角色与基础信息合并
     target_user.role = _pick_role(target_user.role, source_user.role)
     if target_user.original_role is None:
@@ -193,25 +208,18 @@ async def merge_users(db: AsyncSession, target_user: User, source_user: User) ->
     else:
         if ROLE_PRIORITY.get(target_user.role or "", 0) > ROLE_PRIORITY.get(target_user.original_role or "", 0):
             target_user.original_role = target_user.role
+    source_email = source_user.email
+    source_github_id = source_user.github_id
+    source_github_username = source_user.github_username
+    source_github_email = source_user.github_email
+    source_linux_do_id = source_user.linux_do_id
+    source_linux_do_username = source_user.linux_do_username
+    source_linux_do_avatar_template = source_user.linux_do_avatar_template
+
     if not target_user.display_name and source_user.display_name:
         target_user.display_name = source_user.display_name
-    if not target_user.email and source_user.email:
-        target_user.email = source_user.email
-        source_user.email = None
     if not target_user.avatar_url and source_user.avatar_url:
         target_user.avatar_url = source_user.avatar_url
-    if not target_user.github_id and source_user.github_id:
-        target_user.github_id = source_user.github_id
-    if not target_user.github_username and source_user.github_username:
-        target_user.github_username = source_user.github_username
-    if not target_user.github_email and source_user.github_email:
-        target_user.github_email = source_user.github_email
-    if not target_user.linux_do_id and source_user.linux_do_id:
-        target_user.linux_do_id = source_user.linux_do_id
-    if not target_user.linux_do_username and source_user.linux_do_username:
-        target_user.linux_do_username = source_user.linux_do_username
-    if not target_user.linux_do_avatar_template and source_user.linux_do_avatar_template:
-        target_user.linux_do_avatar_template = source_user.linux_do_avatar_template
     if target_user.trust_level is None and source_user.trust_level is not None:
         target_user.trust_level = source_user.trust_level
     elif source_user.trust_level is not None:
@@ -221,17 +229,60 @@ async def merge_users(db: AsyncSession, target_user: User, source_user: User) ->
     if not target_user.role_selected_at and source_user.role_selected_at:
         target_user.role_selected_at = source_user.role_selected_at
 
-    # 先合并统计与徽章
-    await _merge_user_points(db, target_user.id, source_user.id)
-    await _merge_user_stats(db, target_user.id, source_user.id)
-    await _merge_user_achievements(db, target_user.id, source_user.id)
-    await _merge_user_badges(db, target_user.id, source_user.id)
+    # 先清理 source 的唯一字段并落库，避免合并过程触发唯一约束冲突
+    source_user.email = None
+    source_user.github_id = None
+    source_user.github_username = None
+    source_user.github_email = None
+    source_user.linux_do_id = None
+    source_user.linux_do_username = None
+    source_user.linux_do_avatar_template = None
+    await db.flush()
 
-    # 清理密码重置令牌
-    await db.execute(
-        text("DELETE FROM password_reset_tokens WHERE user_id = :source_id"),
-        {"source_id": source_user.id},
-    )
+    if not target_user.email and source_email:
+        target_user.email = source_email
+    if not target_user.github_id and source_github_id:
+        target_user.github_id = source_github_id
+    if not target_user.github_username and source_github_username:
+        target_user.github_username = source_github_username
+    if not target_user.github_email and source_github_email:
+        target_user.github_email = source_github_email
+    if not target_user.linux_do_id and source_linux_do_id:
+        target_user.linux_do_id = source_linux_do_id
+    if not target_user.linux_do_username and source_linux_do_username:
+        target_user.linux_do_username = source_linux_do_username
+    if not target_user.linux_do_avatar_template and source_linux_do_avatar_template:
+        target_user.linux_do_avatar_template = source_linux_do_avatar_template
+
+    # 先合并统计与徽章（表不存在时跳过）
+    if has_table(UserPoints.__tablename__):
+        await _merge_user_points(db, target_user.id, source_user.id)
+    else:
+        logger.warning("跳过合并积分表，表不存在: %s", UserPoints.__tablename__)
+
+    if has_table(UserStats.__tablename__):
+        await _merge_user_stats(db, target_user.id, source_user.id)
+    else:
+        logger.warning("跳过合并用户统计表，表不存在: %s", UserStats.__tablename__)
+
+    if has_table(UserAchievement.__tablename__):
+        await _merge_user_achievements(db, target_user.id, source_user.id)
+    else:
+        logger.warning("跳过合并用户成就表，表不存在: %s", UserAchievement.__tablename__)
+
+    if has_table(UserBadgeShowcase.__tablename__):
+        await _merge_user_badges(db, target_user.id, source_user.id)
+    else:
+        logger.warning("跳过合并徽章展示表，表不存在: %s", UserBadgeShowcase.__tablename__)
+
+    # 清理密码重置令牌（表不存在时跳过）
+    if has_table(PasswordResetToken.__tablename__):
+        await db.execute(
+            text("DELETE FROM password_reset_tokens WHERE user_id = :source_id"),
+            {"source_id": source_user.id},
+        )
+    else:
+        logger.warning("跳过清理密码重置令牌，表不存在: %s", PasswordResetToken.__tablename__)
 
     user_id_dedupe_rules = [
         ("registrations", ["contest_id"]),
@@ -246,6 +297,9 @@ async def merge_users(db: AsyncSession, target_user: User, source_user: User) ->
         ("user_task_events", ["schedule", "period_start", "event_key"]),
     ]
     for table, keys in user_id_dedupe_rules:
+        if not has_table(table):
+            logger.warning("跳过合并表（不存在）: %s", table)
+            continue
         await _dedupe_and_update(db, table, "user_id", keys, source_user.id, target_user.id)
 
     reviewer_id_dedupe_rules = [
@@ -254,6 +308,9 @@ async def merge_users(db: AsyncSession, target_user: User, source_user: User) ->
         ("project_reviews", ["project_id"]),
     ]
     for table, keys in reviewer_id_dedupe_rules:
+        if not has_table(table):
+            logger.warning("跳过合并表（不存在）: %s", table)
+            continue
         await _dedupe_and_update(db, table, "reviewer_id", keys, source_user.id, target_user.id)
 
     user_id_tables = [
@@ -272,12 +329,18 @@ async def merge_users(db: AsyncSession, target_user: User, source_user: User) ->
         "system_logs",
     ]
     for table in user_id_tables:
+        if not has_table(table):
+            logger.warning("跳过合并表（不存在）: %s", table)
+            continue
         await _update_column(db, table, "user_id", source_user.id, target_user.id)
 
     reviewer_tables = [
         "submissions",
     ]
     for table in reviewer_tables:
+        if not has_table(table):
+            logger.warning("跳过合并表（不存在）: %s", table)
+            continue
         await _update_column(db, table, "reviewer_id", source_user.id, target_user.id)
 
     other_columns = [
@@ -290,6 +353,9 @@ async def merge_users(db: AsyncSession, target_user: User, source_user: User) ->
         ("slot_machine_configs", "created_by"),
     ]
     for table, column in other_columns:
+        if not has_table(table):
+            logger.warning("跳过合并表（不存在）: %s", table)
+            continue
         await _update_column(db, table, column, source_user.id, target_user.id)
 
     # 解除 source 用户的第三方绑定，禁用账号

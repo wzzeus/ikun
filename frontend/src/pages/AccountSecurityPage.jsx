@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { authApi } from '../services'
 import { useToast } from '../components/Toast'
@@ -17,6 +17,7 @@ function getErrorMessage(error) {
 export default function AccountSecurityPage() {
   const toast = useToast()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
   const refreshUser = useAuthStore((s) => s.refreshUser)
@@ -25,6 +26,8 @@ export default function AccountSecurityPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [mergeLoading, setMergeLoading] = useState(false)
 
   const [bindingLoading, setBindingLoading] = useState({
     linuxdo: false,
@@ -36,6 +39,12 @@ export default function AccountSecurityPage() {
       navigate('/login?next=/account/security', { replace: true })
     }
   }, [token, navigate])
+
+  useEffect(() => {
+    if (searchParams.get('merge') === 'linuxdo') {
+      setMergeOpen(true)
+    }
+  }, [searchParams])
 
   const hasPassword = !!user?.has_password
 
@@ -50,7 +59,7 @@ export default function AccountSecurityPage() {
       return
     }
     if (new TextEncoder().encode(newPassword).length > 72) {
-      toast.warning('密码长度不能超过 72 字节')
+      toast.warning('密码长度过长')
       return
     }
     if (newPassword !== confirmPassword) {
@@ -96,6 +105,33 @@ export default function AccountSecurityPage() {
     } catch (error) {
       toast.error(getErrorMessage(error))
       setBindingLoading((prev) => ({ ...prev, [provider]: false }))
+    }
+  }
+
+  const handleConfirmMerge = async () => {
+    setMergeLoading(true)
+    try {
+      await authApi.confirmLinuxDoMerge()
+      await refreshUser()
+      toast.success('已合并到当前账号')
+      setMergeOpen(false)
+      navigate('/account/security', { replace: true })
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setMergeLoading(false)
+    }
+  }
+
+  const handleCancelMerge = async () => {
+    try {
+      await authApi.cancelLinuxDoMerge()
+      toast.info('已取消合并请求')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setMergeOpen(false)
+      navigate('/account/security', { replace: true })
     }
   }
 
@@ -164,7 +200,7 @@ export default function AccountSecurityPage() {
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                placeholder="至少 8 位（不超过 72 字节）"
+                placeholder="至少 8 位"
                 autoComplete="new-password"
               />
             </div>
@@ -226,6 +262,35 @@ export default function AccountSecurityPage() {
           </p>
         </div>
       </div>
+
+      <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>确认合并账号</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+            <p>检测到该 Linux.do 账号已绑定到其他账号。</p>
+            <p>是否确认将该账号数据合并到当前账号？</p>
+          </div>
+          <DialogFooter className="mt-6 flex gap-3 sm:justify-end">
+            <button
+              type="button"
+              onClick={handleCancelMerge}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmMerge}
+              disabled={mergeLoading}
+              className={`px-4 py-2 rounded-lg text-white ${mergeLoading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {mergeLoading ? '合并中...' : '确认合并'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

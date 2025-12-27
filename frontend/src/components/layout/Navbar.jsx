@@ -8,8 +8,10 @@ import { Badge } from '../ui/badge'
 import logo from '@/assets/logo.png'
 import { resolveAvatarUrl } from '@/utils/avatar'
 import { useToast } from '@/components/Toast'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui'
 import { userApi } from '@/services'
 import { IMAGE_ACCEPT, validateImageFile } from '@/utils/media'
+import { useContestId } from '@/hooks/useContestId'
 
 const THEME_ICONS = {
   light: Sun,
@@ -125,6 +127,13 @@ function UserDropdown({ user, logout }) {
   const dropdownRef = useRef(null)
   const avatarInputRef = useRef(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileForm, setProfileForm] = useState({
+    username: user?.username || '',
+    display_name: user?.display_name || '',
+    email: user?.email || '',
+  })
   const toast = useToast()
   const setUser = useAuthStore((s) => s.setUser)
 
@@ -133,13 +142,23 @@ function UserDropdown({ user, logout }) {
   const regStatus = useRegistrationStore((s) => s.status)
   const openModal = useRegistrationStore((s) => s.openModal)
   const checkStatus = useRegistrationStore((s) => s.checkStatus)
+  const { contestId } = useContestId()
 
   // 首次加载时检查报名状态
   useEffect(() => {
-    if (user && regStatus === 'unknown') {
-      checkStatus(1)
+    if (user?.role === 'contestant' && regStatus === 'unknown') {
+      checkStatus(contestId)
     }
-  }, [user, regStatus, checkStatus])
+  }, [user, regStatus, checkStatus, contestId])
+
+  useEffect(() => {
+    if (!user) return
+    setProfileForm({
+      username: user.username || '',
+      display_name: user.display_name || '',
+      email: user.email || '',
+    })
+  }, [user])
 
   // 点击外部关闭
   useEffect(() => {
@@ -183,6 +202,44 @@ function UserDropdown({ user, logout }) {
       toast.error(detail)
     } finally {
       setAvatarUploading(false)
+    }
+  }
+
+  const handleProfileSave = async () => {
+    if (!user) return
+    const username = profileForm.username.trim()
+    if (!username) {
+      toast.error('用户名不能为空')
+      return
+    }
+    const displayName = profileForm.display_name?.trim() || null
+    const emailValue = profileForm.email?.trim().toLowerCase() || null
+    const payload = {}
+    if (username !== user.username) {
+      payload.username = username
+    }
+    if ((user.display_name || null) !== displayName) {
+      payload.display_name = displayName
+    }
+    if ((user.email || null) !== emailValue) {
+      payload.email = emailValue
+    }
+    if (Object.keys(payload).length === 0) {
+      toast.warning('未检测到可更新内容')
+      setProfileOpen(false)
+      return
+    }
+    setProfileSaving(true)
+    try {
+      const updated = await userApi.updateMe(payload)
+      setUser(updated)
+      toast.success('资料已更新')
+      setProfileOpen(false)
+    } catch (err) {
+      const detail = err?.response?.data?.detail || '资料更新失败'
+      toast.error(detail)
+    } finally {
+      setProfileSaving(false)
     }
   }
 
@@ -310,6 +367,17 @@ function UserDropdown({ user, logout }) {
               >
                 <Upload className="w-3.5 h-3.5" />
                 {avatarUploading ? '上传中...' : '上传头像'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false)
+                  setProfileOpen(true)
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-all"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                编辑资料
               </button>
               <span className="text-xs text-slate-500 dark:text-slate-400">PNG/JPG/WebP/GIF，≤2MB</span>
             </div>
@@ -499,6 +567,63 @@ function UserDropdown({ user, logout }) {
           </div>
         </div>
       )}
+
+      <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>编辑资料</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">用户名</label>
+              <input
+                type="text"
+                value={profileForm.username}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, username: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                placeholder="请输入用户名"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">昵称</label>
+              <input
+                type="text"
+                value={profileForm.display_name}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, display_name: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                placeholder="可选，展示用昵称"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">邮箱</label>
+              <input
+                type="email"
+                value={profileForm.email}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                placeholder="可选，用于找回密码"
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-6 flex gap-3 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setProfileOpen(false)}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleProfileSave}
+              disabled={profileSaving}
+              className={`px-4 py-2 rounded-lg text-white ${profileSaving ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {profileSaving ? '保存中...' : '保存'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

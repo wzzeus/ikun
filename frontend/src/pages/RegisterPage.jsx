@@ -46,7 +46,7 @@ export default function RegisterPage() {
       return
     }
     if (new TextEncoder().encode(password).length > 72) {
-      toast.warning('密码长度不能超过 72 字节')
+      toast.warning('密码长度过长')
       return
     }
     setSaving(true)
@@ -128,7 +128,7 @@ export default function RegisterPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
-              placeholder="至少 8 位（不超过 72 字节）"
+              placeholder="至少 8 位"
               autoComplete="new-password"
             />
           </div>

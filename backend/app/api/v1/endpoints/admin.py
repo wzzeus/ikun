@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.api.v1.endpoints.user import get_current_user_dep as get_current_user
 from app.models.user import User
+from app.schemas.user import UserUpdateRequest as BaseUserUpdateRequest
 from app.models.points import (
     UserPoints, PointsLedger, PointsReason,
     DailySignin, SigninMilestone,
@@ -55,7 +56,7 @@ class UserListItem(BaseModel):
     created_at: str
 
 
-class UserUpdateRequest(BaseModel):
+class UserUpdateRequest(BaseUserUpdateRequest):
     role: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -427,6 +428,33 @@ async def update_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
+    if request.username is not None:
+        new_username = request.username.strip()
+        if new_username != user.username:
+            exists = await db.execute(
+                select(User).where(User.username == new_username, User.id != user_id)
+            )
+            if exists.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail="用户名已被使用")
+            user.username = new_username
+
+    if request.email is not None:
+        new_email = request.email
+        if isinstance(new_email, str):
+            new_email = new_email.strip().lower()
+        if new_email != user.email:
+            if new_email:
+                exists = await db.execute(
+                    select(User).where(User.email == new_email, User.id != user_id)
+                )
+                if exists.scalar_one_or_none():
+                    raise HTTPException(status_code=409, detail="邮箱已被使用")
+            user.email = new_email or None
+
+    if request.display_name is not None:
+        display_name = request.display_name.strip() if isinstance(request.display_name, str) else None
+        user.display_name = display_name or None
 
     if request.role is not None:
         user.role = request.role

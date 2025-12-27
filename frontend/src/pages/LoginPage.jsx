@@ -64,6 +64,7 @@ export default function LoginPage() {
     const params = new URLSearchParams(hash.slice(1))
     const token = params.get('token')
     if (!token) return
+    const notice = params.get('notice')
 
     // 优先使用回调中的 next，其次使用 URL 参数中的 next
     const next = params.get('next') || nextFromQuery
@@ -76,6 +77,9 @@ export default function LoginPage() {
     login(user, token)
     trackLogin('linuxdo')
     window.location.hash = ''
+    if (notice) {
+      toast.info(notice)
+    }
 
     // 检查是否需要角色选择引导
     // 如果用户还没选过角色（role_selected 为 false），跳转到引导页
@@ -87,7 +91,7 @@ export default function LoginPage() {
       // 已选过角色，直接跳转
       navigate(next || '/', { replace: true })
     }
-  }, [login, navigate, nextFromQuery])
+  }, [login, navigate, nextFromQuery, toast])
 
   /**
    * 开始 Linux.do 登录
@@ -121,7 +125,7 @@ export default function LoginPage() {
       return
     }
     if (new TextEncoder().encode(password).length > 72) {
-      toast.warning('密码长度不能超过 72 字节')
+      toast.warning('密码长度过长')
       return
     }
     setLocalLoading(true)
@@ -195,7 +199,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                placeholder="请输入密码（不超过 72 字节）"
+                placeholder="请输入密码"
                 autoComplete="current-password"
               />
             </div>
