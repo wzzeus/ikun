@@ -39,7 +39,7 @@ export default function Layout() {
   }, [location.pathname, location.hash])
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-200 flex flex-col transition-colors duration-300">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-200 flex flex-col pt-16 transition-colors duration-300">
       <Navbar />
       {/* 全局公告横幅 */}
       <AnnouncementBanner />

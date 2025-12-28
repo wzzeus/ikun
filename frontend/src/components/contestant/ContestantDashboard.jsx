@@ -336,13 +336,14 @@ export function ContestantStatusCard({ className, variant = 'default' }) {
  * 参赛者完整仪表盘
  * 用于首页或独立页面
  */
-export default function ContestantDashboard({ className }) {
+export default function ContestantDashboard({ className, contestId: contestIdProp }) {
   const user = useAuthStore((s) => s.user)
   const registration = useRegistrationStore((s) => s.registration)
   const status = useRegistrationStore((s) => s.status)
   const checkStatus = useRegistrationStore((s) => s.checkStatus)
   const openModal = useRegistrationStore((s) => s.openModal)
-  const { contestId } = useContestId()
+  const { contestId: fallbackContestId } = useContestId()
+  const contestId = contestIdProp ?? fallbackContestId
 
   const [githubStats, setGithubStats] = useState(null)
   const [quotaData, setQuotaData] = useState(null)
@@ -351,7 +352,7 @@ export default function ContestantDashboard({ className }) {
 
   // 检查报名状态
   useEffect(() => {
-    if (user?.role === 'contestant') {
+    if (user?.role === 'contestant' && contestId) {
       checkStatus(contestId).finally(() => setLoading(false))
     } else {
       setLoading(false)

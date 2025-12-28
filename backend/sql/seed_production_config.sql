@@ -3,7 +3,7 @@
 
 
 -- 表: contests
-INSERT INTO `contests` VALUES (1,'2025-12-16 16:39:21.705059','2025-12-16 16:39:21.705059','第一届鸡王争霸赛','# ikuncode 开发者实战大赏\n\n这是一场面向所有开发者的创意编程比赛，展示你的技术实力，赢取丰厚奖品！','signup','2025-12-16 16:39:21','2026-01-15 16:39:21',NULL,NULL,NULL,NULL);
+INSERT INTO `contests` (`id`, `created_at`, `updated_at`, `title`, `description`, `phase`, `signup_start`, `signup_end`, `submit_start`, `submit_end`, `vote_start`, `vote_end`) VALUES (1,'2025-12-16 16:39:21.705059','2025-12-16 16:39:21.705059','第一届鸡王争霸赛','# ikuncode 开发者实战大赏\n\n这是一场面向所有开发者的创意编程比赛，展示你的技术实力，赢取丰厚奖品！','signup','2025-12-16 16:39:21','2026-01-15 16:39:21',NULL,NULL,NULL,NULL);
 
 
 -- 表: achievement_definitions

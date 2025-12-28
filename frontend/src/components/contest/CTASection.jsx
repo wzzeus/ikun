@@ -8,9 +8,9 @@ import { RegistrationModal, PreparationGuideModal } from '../registration'
 /**
  * CTA 行动号召区组件
  */
-export default function CTASection({ contestPhase }) {
+export default function CTASection({ contestPhase, contestId }) {
   // 当前比赛 ID（后续可从 props 或 context 获取）
-  const contestId = 1
+  const resolvedContestId = contestId ?? 1
 
   // 认证状态
   const token = useAuthStore((s) => s.token)
@@ -32,8 +32,8 @@ export default function CTASection({ contestPhase }) {
   // 登录后检查报名状态（仅参赛者需要检查）
   useEffect(() => {
     if (!token || !isContestant) return
-    checkStatus(contestId).catch(() => {})
-  }, [token, isContestant, checkStatus])
+    checkStatus(resolvedContestId).catch(() => {})
+  }, [token, isContestant, checkStatus, resolvedContestId])
 
   // 是否可以编辑（参赛者角色、已报名且未撤回）
   const canEdit = token && isContestant && registration && status !== 'withdrawn' && status !== 'none'
@@ -47,7 +47,7 @@ export default function CTASection({ contestPhase }) {
   const handleWithdraw = async () => {
     if (!window.confirm(withdrawConfirmMessage)) return
     try {
-      await withdraw(contestId)
+      await withdraw(resolvedContestId)
     } catch {
       // 错误由 store 处理
     }
@@ -151,7 +151,7 @@ export default function CTASection({ contestPhase }) {
       <PreparationGuideModal />
 
       {/* 报名弹窗 */}
-      <RegistrationModal contestId={contestId} />
+      <RegistrationModal contestId={resolvedContestId} />
     </section>
   )
 }

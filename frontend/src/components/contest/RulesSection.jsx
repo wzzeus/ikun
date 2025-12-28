@@ -4,7 +4,17 @@ import { RISK_RULES, REVIEW_WEIGHTS, PROCESS_STEPS } from './constants'
 /**
  * 风控规则与评审区组件
  */
-export default function RulesSection() {
+export default function RulesSection({ templateConfig }) {
+  const riskRules = templateConfig?.risk_rules?.length ? templateConfig.risk_rules : RISK_RULES
+  const baseReviewWeights = templateConfig?.review_weights?.length
+    ? templateConfig.review_weights
+    : REVIEW_WEIGHTS
+  const reviewWeights = baseReviewWeights.map((item, index) => ({
+    ...REVIEW_WEIGHTS[index % REVIEW_WEIGHTS.length],
+    ...item,
+  }))
+  const processSteps = templateConfig?.process_steps?.length ? templateConfig.process_steps : PROCESS_STEPS
+
   return (
     <section id="rules" className="py-16 bg-slate-200/50 dark:bg-slate-900">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -13,11 +23,11 @@ export default function RulesSection() {
           <div className="flex items-center mb-4">
             <AlertTriangle className="text-red-500 mr-2" />
             <h3 className="text-xl font-bold text-red-500">
-              <span aria-hidden="true">⚠️</span> 风控与返还规则（必读）
+              <span aria-hidden="true">⚠️</span>风控与返还规则（必读）
             </h3>
           </div>
           <ul className="list-disc list-inside space-y-2 text-slate-700 dark:text-slate-300 text-sm">
-            {RISK_RULES.map((rule) => (
+            {riskRules.map((rule) => (
               <li key={rule.label}>
                 <span className="font-bold text-slate-800 dark:text-white">{rule.label}：</span>
                 {rule.content}
@@ -34,7 +44,7 @@ export default function RulesSection() {
               <Award className="mr-2 text-yellow-500 dark:text-yellow-400" /> 评审机制
             </h3>
             <div className="space-y-4">
-              {REVIEW_WEIGHTS.map((item) => (
+              {reviewWeights.map((item) => (
                 <div key={item.title} className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-bold text-slate-800 dark:text-white">{item.title}</span>
@@ -59,7 +69,7 @@ export default function RulesSection() {
             </h3>
             {/* 时间轴 - 确保圆点与竖线对齐 */}
             <div className="relative border-l border-slate-300 dark:border-slate-700 ml-3 space-y-8 py-2">
-              {PROCESS_STEPS.map((step) => (
+              {processSteps.map((step) => (
                 <div key={step.step} className="relative pl-8">
                   <span className="absolute left-0 -translate-x-1/2 top-1 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-full flex items-center justify-center text-xs text-slate-700 dark:text-slate-300">
                     {step.step}

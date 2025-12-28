@@ -46,6 +46,7 @@ import { useThemeStore } from '../stores/themeStore'
 import { adminApi2, contestApi, predictionApi, projectApi } from '../services'
 import { resolveAvatarUrl } from '../utils/avatar'
 import { IMAGE_ACCEPT, validateImageFile } from '../utils/media'
+import { PRIZE_CONFIG, RISK_RULES, REVIEW_WEIGHTS, PROCESS_STEPS } from '../components/contest/constants'
 
 // Tab 组件 - 现代简洁风格
 function Tab({ active, onClick, children, icon: Icon }) {
@@ -148,11 +149,44 @@ const CONTEST_FORM_DEFAULT = {
   description: '',
   phase: 'upcoming',
   visibility: 'published',
+  home_visible: false,
   banner_url: '',
   rules_md: '',
   prizes_md: '',
   review_rules_md: '',
   faq_md: '',
+  template_prize_section_title: '',
+  template_prize_section_intro: '',
+  template_prize_champion_title: '',
+  template_prize_champion_subtitle: '',
+  template_prize_champion_count: '',
+  template_prize_champion_badge: '',
+  template_prize_champion_cash_prize: '',
+  template_prize_champion_api_return: '',
+  template_prize_champion_api_limit: '',
+  template_prize_champion_discount: '',
+  template_prize_champion_discount_note: '',
+  template_prize_champion_button_text: '',
+  template_prize_champion_button_url: '',
+  template_prize_second_title: '',
+  template_prize_second_subtitle: '',
+  template_prize_second_count: '',
+  template_prize_second_api_return: '',
+  template_prize_second_api_limit: '',
+  template_prize_second_discount: '',
+  template_prize_third_title: '',
+  template_prize_third_subtitle: '',
+  template_prize_third_count: '',
+  template_prize_third_api_return: '',
+  template_prize_third_api_limit: '',
+  template_prize_third_discount: '',
+  template_participation_title: '',
+  template_participation_description: '',
+  template_participation_reward: '',
+  template_participation_extra: '',
+  template_risk_rules: '',
+  template_review_weights: '',
+  template_process_steps: '',
   signup_start: '',
   signup_end: '',
   submit_start: '',
@@ -162,6 +196,154 @@ const CONTEST_FORM_DEFAULT = {
 }
 
 const MAX_BANNER_BYTES = 5 * 1024 * 1024
+
+const DEFAULT_PRIZE_SECTION_TITLE = '奖项设置'
+const DEFAULT_PRIZE_SECTION_INTRO = '核心机制：只要你敢写且获奖，Token 消耗 ikuncode 全额买单！'
+const DEFAULT_PARTICIPATION = {
+  title: '阳光普照奖（参与奖）',
+  description: '凡提交合格开源作品的选手',
+  reward: '8.5折充值优惠券',
+  extra: '平台专属"ikun开发者徽章"',
+}
+
+const formatRiskRules = (rules) =>
+  rules.map((rule) => `${rule.label}|${rule.content}`).join('\n')
+
+const formatReviewWeights = (weights) =>
+  weights.map((item) => `${item.title}|${item.weight}|${item.description}`).join('\n')
+
+const formatProcessSteps = (steps) =>
+  steps
+    .map((step) => {
+      const parts = [step.step, step.title, step.description]
+      if (step.highlight) parts.push(step.highlight)
+      if (step.suffix) parts.push(step.suffix)
+      return parts.join('|')
+    })
+    .join('\n')
+
+const DEFAULT_RISK_RULES_TEXT = formatRiskRules(RISK_RULES)
+const DEFAULT_REVIEW_WEIGHTS_TEXT = formatReviewWeights(REVIEW_WEIGHTS)
+const DEFAULT_PROCESS_STEPS_TEXT = formatProcessSteps(PROCESS_STEPS)
+
+const splitLines = (value) =>
+  String(value ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+const compactTextObject = (objectValue) => {
+  const entries = Object.entries(objectValue).filter(([, value]) => String(value ?? '').trim())
+  return entries.length ? Object.fromEntries(entries) : null
+}
+
+const parseRiskRulesText = (value) => {
+  const lines = splitLines(value)
+  if (!lines.length) return { items: [] }
+  const items = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const parts = lines[index].split('|').map((part) => part.trim())
+    if (parts.length < 2) {
+      return { error: `风控规则第 ${index + 1} 行格式错误，请使用“标题|内容”` }
+    }
+    items.push({ label: parts[0], content: parts.slice(1).join('|').trim() })
+  }
+  return { items }
+}
+
+const parseReviewWeightsText = (value) => {
+  const lines = splitLines(value)
+  if (!lines.length) return { items: [] }
+  const items = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const parts = lines[index].split('|').map((part) => part.trim())
+    if (parts.length < 3) {
+      return { error: `评审权重第 ${index + 1} 行格式错误，请使用“标题|权重|描述”` }
+    }
+    const weightText = parts[1].replace('%', '').trim()
+    const weightValue = Number(weightText)
+    if (!Number.isFinite(weightValue)) {
+      return { error: `评审权重第 ${index + 1} 行的权重不是数字` }
+    }
+    items.push({
+      title: parts[0],
+      weight: weightValue,
+      description: parts.slice(2).join('|').trim(),
+    })
+  }
+  return { items }
+}
+
+const parseProcessStepsText = (value) => {
+  const lines = splitLines(value)
+  if (!lines.length) return { items: [] }
+  const items = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const parts = lines[index].split('|').map((part) => part.trim())
+    if (parts.length < 3) {
+      return { error: `参赛流程第 ${index + 1} 行格式错误，请使用“步骤|标题|描述|高亮(可选)|后缀(可选)”` }
+    }
+    const stepNumber = Number(parts[0])
+    const stepValue = Number.isFinite(stepNumber) ? stepNumber : parts[0]
+    const item = {
+      step: stepValue,
+      title: parts[1],
+      description: parts[2],
+    }
+    if (parts[3]) item.highlight = parts[3]
+    if (parts[4]) item.suffix = parts[4]
+    items.push(item)
+  }
+  return { items }
+}
+
+const buildTemplateFormData = (templateConfig) => {
+  const prizeSection = templateConfig?.prize_section || {}
+  const prizes = templateConfig?.prizes || {}
+  const champion = prizes.champion || {}
+  const second = prizes.second || {}
+  const third = prizes.third || {}
+  const participation = prizes.participation || {}
+
+  return {
+    template_prize_section_title: prizeSection.title || '',
+    template_prize_section_intro: prizeSection.intro || '',
+    template_prize_champion_title: champion.title || '',
+    template_prize_champion_subtitle: champion.subtitle || '',
+    template_prize_champion_count: champion.count || '',
+    template_prize_champion_badge: champion.badge || '',
+    template_prize_champion_cash_prize: champion.cashPrize || '',
+    template_prize_champion_api_return: champion.apiReturn || '',
+    template_prize_champion_api_limit: champion.apiLimit || '',
+    template_prize_champion_discount: champion.discount || '',
+    template_prize_champion_discount_note: champion.discountNote || '',
+    template_prize_champion_button_text: champion.buttonText || '',
+    template_prize_champion_button_url: champion.buttonUrl || champion.button_url || '',
+    template_prize_second_title: second.title || '',
+    template_prize_second_subtitle: second.subtitle || '',
+    template_prize_second_count: second.count || '',
+    template_prize_second_api_return: second.apiReturn || '',
+    template_prize_second_api_limit: second.apiLimit || '',
+    template_prize_second_discount: second.discount || '',
+    template_prize_third_title: third.title || '',
+    template_prize_third_subtitle: third.subtitle || '',
+    template_prize_third_count: third.count || '',
+    template_prize_third_api_return: third.apiReturn || '',
+    template_prize_third_api_limit: third.apiLimit || '',
+    template_prize_third_discount: third.discount || '',
+    template_participation_title: participation.title || '',
+    template_participation_description: participation.description || '',
+    template_participation_reward: participation.reward || '',
+    template_participation_extra: participation.extra || '',
+    template_risk_rules: templateConfig?.risk_rules?.length ? formatRiskRules(templateConfig.risk_rules) : '',
+    template_review_weights: templateConfig?.review_weights?.length
+      ? formatReviewWeights(templateConfig.review_weights)
+      : '',
+    template_process_steps: templateConfig?.process_steps?.length
+      ? formatProcessSteps(templateConfig.process_steps)
+      : '',
+  }
+}
 
 const toContestDatetimeInput = (value) => {
   if (!value) return ''
@@ -1352,11 +1534,13 @@ function UsersPanel() {
       description: contest?.description || '',
       phase: contest?.phase || 'upcoming',
       visibility: contest?.visibility || 'published',
+      home_visible: contest?.home_visible ?? false,
       banner_url: contest?.banner_url || '',
       rules_md: contest?.rules_md || '',
       prizes_md: contest?.prizes_md || '',
       review_rules_md: contest?.review_rules_md || '',
       faq_md: contest?.faq_md || '',
+      ...buildTemplateFormData(contest?.template_config),
       signup_start: toContestDatetimeInput(contest?.signup_start),
       signup_end: toContestDatetimeInput(contest?.signup_end),
       submit_start: toContestDatetimeInput(contest?.submit_start),
@@ -1380,15 +1564,89 @@ function UsersPanel() {
       return text ? text : null
     }
 
-    const buildPayload = () => ({
+    const buildTemplateConfig = () => {
+      const riskRulesResult = parseRiskRulesText(formData.template_risk_rules)
+      if (riskRulesResult.error) return { error: riskRulesResult.error }
+
+      const reviewWeightsResult = parseReviewWeightsText(formData.template_review_weights)
+      if (reviewWeightsResult.error) return { error: reviewWeightsResult.error }
+
+      const processStepsResult = parseProcessStepsText(formData.template_process_steps)
+      if (processStepsResult.error) return { error: processStepsResult.error }
+
+      const prizeSection = compactTextObject({
+        title: formData.template_prize_section_title,
+        intro: formData.template_prize_section_intro,
+      })
+
+      const champion = compactTextObject({
+        title: formData.template_prize_champion_title,
+        subtitle: formData.template_prize_champion_subtitle,
+        count: formData.template_prize_champion_count,
+        badge: formData.template_prize_champion_badge,
+        cashPrize: formData.template_prize_champion_cash_prize,
+        apiReturn: formData.template_prize_champion_api_return,
+        apiLimit: formData.template_prize_champion_api_limit,
+        discount: formData.template_prize_champion_discount,
+        discountNote: formData.template_prize_champion_discount_note,
+        buttonText: formData.template_prize_champion_button_text,
+        buttonUrl: formData.template_prize_champion_button_url,
+      })
+
+      const second = compactTextObject({
+        title: formData.template_prize_second_title,
+        subtitle: formData.template_prize_second_subtitle,
+        count: formData.template_prize_second_count,
+        apiReturn: formData.template_prize_second_api_return,
+        apiLimit: formData.template_prize_second_api_limit,
+        discount: formData.template_prize_second_discount,
+      })
+
+      const third = compactTextObject({
+        title: formData.template_prize_third_title,
+        subtitle: formData.template_prize_third_subtitle,
+        count: formData.template_prize_third_count,
+        apiReturn: formData.template_prize_third_api_return,
+        apiLimit: formData.template_prize_third_api_limit,
+        discount: formData.template_prize_third_discount,
+      })
+
+      const participation = compactTextObject({
+        title: formData.template_participation_title,
+        description: formData.template_participation_description,
+        reward: formData.template_participation_reward,
+        extra: formData.template_participation_extra,
+      })
+
+      const prizes = {}
+      if (champion) prizes.champion = champion
+      if (second) prizes.second = second
+      if (third) prizes.third = third
+      if (participation) prizes.participation = participation
+
+      const templateConfig = {}
+      if (prizeSection) templateConfig.prize_section = prizeSection
+      if (Object.keys(prizes).length) templateConfig.prizes = prizes
+      if (riskRulesResult.items.length) templateConfig.risk_rules = riskRulesResult.items
+      if (reviewWeightsResult.items.length) templateConfig.review_weights = reviewWeightsResult.items
+      if (processStepsResult.items.length) templateConfig.process_steps = processStepsResult.items
+
+      return {
+        config: Object.keys(templateConfig).length ? templateConfig : null,
+      }
+    }
+
+    const buildPayload = (templateConfig) => ({
       title: formData.title.trim(),
       description: formData.description.trim() || null,
       phase: formData.phase || null,
       visibility: formData.visibility || null,
+      home_visible: formData.home_visible ?? false,
       rules_md: normalizeText(formData.rules_md),
       prizes_md: normalizeText(formData.prizes_md),
       review_rules_md: normalizeText(formData.review_rules_md),
       faq_md: normalizeText(formData.faq_md),
+      template_config: templateConfig,
       signup_start: formData.signup_start || null,
       signup_end: formData.signup_end || null,
       submit_start: formData.submit_start || null,
@@ -1404,9 +1662,15 @@ function UsersPanel() {
         return
       }
 
+      const templateConfigResult = buildTemplateConfig()
+      if (templateConfigResult.error) {
+        toast.error(templateConfigResult.error)
+        return
+      }
+
       setSaving(true)
       try {
-        const payload = buildPayload()
+        const payload = buildPayload(templateConfigResult.config)
         if (editingContest) {
           await adminApi2.patch(`/contests/${editingContest.id}`, payload)
           toast.success('赛事已更新')
@@ -1541,6 +1805,11 @@ function UsersPanel() {
                         >
                           {CONTEST_VISIBILITY_LABELS[contest.visibility] || contest.visibility || '未知'}
                         </span>
+                        {contest.home_visible && (
+                          <span className="px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-200">
+                            首页展示
+                          </span>
+                        )}
                       </div>
                       {contest.description && (
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
@@ -1647,6 +1916,22 @@ function UsersPanel() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      首页展示
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!formData.home_visible}
+                        onChange={(e) => updateField('home_visible', e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-600 dark:text-slate-300">
+                        设为首页展示（自动取消其他比赛的首页展示）
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -1720,54 +2005,440 @@ function UsersPanel() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      赛事规则
+                      赛事规则补充
                     </label>
                     <textarea
                       value={formData.rules_md}
                       onChange={(e) => updateField('rules_md', e.target.value)}
                       rows={4}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
-                      placeholder="填写赛事规则（Markdown）"
+                      placeholder="填写赛事规则补充（Markdown）"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      奖项说明
+                      奖项补充说明
                     </label>
                     <textarea
                       value={formData.prizes_md}
                       onChange={(e) => updateField('prizes_md', e.target.value)}
                       rows={4}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
-                      placeholder="填写奖项说明（Markdown）"
+                      placeholder="填写奖项补充说明（Markdown）"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      评审规则
+                      评审规则补充
                     </label>
                     <textarea
                       value={formData.review_rules_md}
                       onChange={(e) => updateField('review_rules_md', e.target.value)}
                       rows={4}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
-                      placeholder="填写评审规则（Markdown）"
+                      placeholder="填写评审规则补充（Markdown）"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      常见问题
+                      常见问题补充
                     </label>
                     <textarea
                       value={formData.faq_md}
                       onChange={(e) => updateField('faq_md', e.target.value)}
                       rows={4}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
-                      placeholder="填写 FAQ（Markdown）"
+                      placeholder="填写 FAQ 补充（Markdown）"
                     />
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
-                    支持 Markdown，保存后会在前台按段落展示。
+                    支持 Markdown，作为首页模板的补充说明展示。
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 p-4 space-y-4">
+                    <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      首页模板文字配置
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          奖项区标题
+                        </label>
+                        <input
+                          value={formData.template_prize_section_title}
+                          onChange={(e) => updateField('template_prize_section_title', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${DEFAULT_PRIZE_SECTION_TITLE}`}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          奖项区说明
+                        </label>
+                        <textarea
+                          value={formData.template_prize_section_intro}
+                          onChange={(e) => updateField('template_prize_section_intro', e.target.value)}
+                          rows={2}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
+                          placeholder={`默认：${DEFAULT_PRIZE_SECTION_INTRO}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        冠军卡片
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          名称
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_title}
+                          onChange={(e) => updateField('template_prize_champion_title', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.title}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          副标题
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_subtitle}
+                          onChange={(e) => updateField('template_prize_champion_subtitle', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.subtitle}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          名额
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_count}
+                          onChange={(e) => updateField('template_prize_champion_count', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.count}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          徽章文案
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_badge}
+                          onChange={(e) => updateField('template_prize_champion_badge', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.badge}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          现金奖励
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_cash_prize}
+                          onChange={(e) => updateField('template_prize_champion_cash_prize', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.cashPrize}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          API 返还
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_api_return}
+                          onChange={(e) => updateField('template_prize_champion_api_return', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.apiReturn}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          API 上限
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_api_limit}
+                          onChange={(e) => updateField('template_prize_champion_api_limit', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.apiLimit}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          折扣
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_discount}
+                          onChange={(e) => updateField('template_prize_champion_discount', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.discount}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          折扣说明
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_discount_note}
+                          onChange={(e) => updateField('template_prize_champion_discount_note', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.discountNote}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          按钮文案
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_button_text}
+                          onChange={(e) => updateField('template_prize_champion_button_text', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.champion.buttonText}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          按钮链接
+                        </label>
+                        <input
+                          value={formData.template_prize_champion_button_url}
+                          onChange={(e) => updateField('template_prize_champion_button_url', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder="默认：https://api.ikuncode.cc/"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        亚军卡片
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          名称
+                        </label>
+                        <input
+                          value={formData.template_prize_second_title}
+                          onChange={(e) => updateField('template_prize_second_title', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.second.title}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          副标题
+                        </label>
+                        <input
+                          value={formData.template_prize_second_subtitle}
+                          onChange={(e) => updateField('template_prize_second_subtitle', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.second.subtitle}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          名额
+                        </label>
+                        <input
+                          value={formData.template_prize_second_count}
+                          onChange={(e) => updateField('template_prize_second_count', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.second.count}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          API 返还
+                        </label>
+                        <input
+                          value={formData.template_prize_second_api_return}
+                          onChange={(e) => updateField('template_prize_second_api_return', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.second.apiReturn}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          API 上限
+                        </label>
+                        <input
+                          value={formData.template_prize_second_api_limit}
+                          onChange={(e) => updateField('template_prize_second_api_limit', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.second.apiLimit}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          折扣
+                        </label>
+                        <input
+                          value={formData.template_prize_second_discount}
+                          onChange={(e) => updateField('template_prize_second_discount', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.second.discount}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        季军卡片
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          名称
+                        </label>
+                        <input
+                          value={formData.template_prize_third_title}
+                          onChange={(e) => updateField('template_prize_third_title', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.third.title}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          副标题
+                        </label>
+                        <input
+                          value={formData.template_prize_third_subtitle}
+                          onChange={(e) => updateField('template_prize_third_subtitle', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.third.subtitle}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          名额
+                        </label>
+                        <input
+                          value={formData.template_prize_third_count}
+                          onChange={(e) => updateField('template_prize_third_count', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.third.count}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          API 返还
+                        </label>
+                        <input
+                          value={formData.template_prize_third_api_return}
+                          onChange={(e) => updateField('template_prize_third_api_return', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.third.apiReturn}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          API 上限
+                        </label>
+                        <input
+                          value={formData.template_prize_third_api_limit}
+                          onChange={(e) => updateField('template_prize_third_api_limit', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.third.apiLimit}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          折扣
+                        </label>
+                        <input
+                          value={formData.template_prize_third_discount}
+                          onChange={(e) => updateField('template_prize_third_discount', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${PRIZE_CONFIG.third.discount}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        参与奖
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          标题
+                        </label>
+                        <input
+                          value={formData.template_participation_title}
+                          onChange={(e) => updateField('template_participation_title', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${DEFAULT_PARTICIPATION.title}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          描述
+                        </label>
+                        <input
+                          value={formData.template_participation_description}
+                          onChange={(e) => updateField('template_participation_description', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${DEFAULT_PARTICIPATION.description}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          奖励
+                        </label>
+                        <input
+                          value={formData.template_participation_reward}
+                          onChange={(e) => updateField('template_participation_reward', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${DEFAULT_PARTICIPATION.reward}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          补充
+                        </label>
+                        <input
+                          value={formData.template_participation_extra}
+                          onChange={(e) => updateField('template_participation_extra', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder={`默认：${DEFAULT_PARTICIPATION.extra}`}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        风控规则（每行：标题|内容）
+                      </label>
+                      <textarea
+                        value={formData.template_risk_rules}
+                        onChange={(e) => updateField('template_risk_rules', e.target.value)}
+                        rows={4}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical font-mono text-xs"
+                        placeholder={DEFAULT_RISK_RULES_TEXT}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        评审权重（每行：标题|权重|描述）
+                      </label>
+                      <textarea
+                        value={formData.template_review_weights}
+                        onChange={(e) => updateField('template_review_weights', e.target.value)}
+                        rows={3}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical font-mono text-xs"
+                        placeholder={DEFAULT_REVIEW_WEIGHTS_TEXT}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        参赛流程（每行：步骤|标题|描述|高亮(可选)|后缀(可选)）
+                      </label>
+                      <textarea
+                        value={formData.template_process_steps}
+                        onChange={(e) => updateField('template_process_steps', e.target.value)}
+                        rows={4}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical font-mono text-xs"
+                        placeholder={DEFAULT_PROCESS_STEPS_TEXT}
+                      />
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      留空表示使用默认模板内容。
+                    </div>
                   </div>
                 </div>
 

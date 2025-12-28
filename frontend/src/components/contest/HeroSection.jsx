@@ -59,7 +59,7 @@ export default function HeroSection() {
   /**
    * 处理报名按钮点击
    * 已登录且已报名：直接打开报名弹窗编辑
-   * 已登录但未报名：打开事前准备引导
+   * 已登录但未报名：打开赛前准备引导
    * 未登录：滚动到报名区（CTA Section）
    */
   const handleSignupClick = () => {

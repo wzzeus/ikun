@@ -43,6 +43,7 @@ export const contestApi = {
   get: (id) => api.get(`/contests/${id}`),
   getStats: (id) => api.get(`/contests/${id}/stats`),
   getCurrent: (params) => api.get('/contests/current', { params }),
+  getHomepage: () => api.get('/contests/homepage'),
   signup: (id) => api.post(`/contests/${id}/signup`),
   getRanking: (id, params) => api.get(`/contests/${id}/ranking`, { params }),
   getRankingDetail: (id, projectId) => api.get(`/contests/${id}/ranking/${projectId}`),

@@ -1,7 +1,7 @@
 """
 比赛模型
 """
-from sqlalchemy import Column, String, Text, DateTime, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, String, Text, DateTime, Enum as SQLEnum, Boolean, JSON
 import enum
 
 from app.models.base import BaseModel
@@ -37,11 +37,19 @@ class Contest(BaseModel):
         nullable=False,
         comment="比赛可见性"
     )
+    home_visible = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+        comment="是否首页展示",
+    )
     banner_url = Column(String(500), nullable=True, comment="比赛 Banner 图片")
     rules_md = Column(Text, nullable=True, comment="比赛规则（Markdown）")
     prizes_md = Column(Text, nullable=True, comment="奖项说明（Markdown）")
     review_rules_md = Column(Text, nullable=True, comment="评审规则（Markdown）")
     faq_md = Column(Text, nullable=True, comment="常见问题（Markdown）")
+    template_config = Column(JSON, nullable=True, comment="首页模板配置（JSON）")
     phase = Column(
         SQLEnum(
             'upcoming', 'signup', 'submission', 'voting', 'ended',

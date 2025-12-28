@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { authApi } from '../services'
 import { useToast } from '../components/Toast'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 function getErrorMessage(error) {
   const detail = error?.response?.data?.detail

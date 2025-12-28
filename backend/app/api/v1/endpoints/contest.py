@@ -9,7 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, File, UploadFile
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,11 +45,13 @@ class ContestResponse(BaseModel):
     description: Optional[str] = None
     phase: ContestPhase
     visibility: ContestVisibility = ContestVisibility.PUBLISHED
+    home_visible: bool = False
     banner_url: Optional[str] = None
     rules_md: Optional[str] = None
     prizes_md: Optional[str] = None
     review_rules_md: Optional[str] = None
     faq_md: Optional[str] = None
+    template_config: Optional[dict] = None
     signup_start: Optional[datetime] = None
     signup_end: Optional[datetime] = None
     submit_start: Optional[datetime] = None
@@ -110,11 +112,13 @@ class ContestCreateRequest(BaseModel):
     description: Optional[str] = None
     phase: Optional[ContestPhase] = None
     visibility: Optional[ContestVisibility] = None
+    home_visible: Optional[bool] = None
     banner_url: Optional[str] = None
     rules_md: Optional[str] = None
     prizes_md: Optional[str] = None
     review_rules_md: Optional[str] = None
     faq_md: Optional[str] = None
+    template_config: Optional[dict] = None
     signup_start: Optional[datetime] = None
     signup_end: Optional[datetime] = None
     submit_start: Optional[datetime] = None
@@ -130,11 +134,13 @@ class ContestUpdateRequest(BaseModel):
     description: Optional[str] = None
     phase: Optional[ContestPhase] = None
     visibility: Optional[ContestVisibility] = None
+    home_visible: Optional[bool] = None
     banner_url: Optional[str] = None
     rules_md: Optional[str] = None
     prizes_md: Optional[str] = None
     review_rules_md: Optional[str] = None
     faq_md: Optional[str] = None
+    template_config: Optional[dict] = None
     signup_start: Optional[datetime] = None
     signup_end: Optional[datetime] = None
     submit_start: Optional[datetime] = None
@@ -388,6 +394,26 @@ async def list_contests(
         items=[ContestResponse.model_validate(c) for c in contests],
         total=len(contests)
     )
+
+@router.get("/homepage", response_model=ContestResponse, summary="获取首页展示比赛")
+async def get_homepage_contest(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """获取首页展示比赛，未配置时返回 404。"""
+    query = select(Contest).where(Contest.home_visible.is_(True))
+    if not (current_user and current_user.is_admin):
+        query = query.where(Contest.visibility == ContestVisibility.PUBLISHED.value)
+    result = await db.execute(query.order_by(Contest.updated_at.desc(), Contest.id.desc()))
+    contest = result.scalars().first()
+
+    if contest is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="未配置首页展示比赛",
+        )
+
+    return ContestResponse.model_validate(contest)
 
 
 @router.get("/current", response_model=ContestResponse, summary="获取当前比赛")
@@ -756,17 +782,23 @@ async def create_contest(
         else ContestVisibility.PUBLISHED.value
     )
     banner_url = ensure_local_media_url(payload.banner_url, "赛事 Banner")
+    home_visible = bool(payload.home_visible) if payload.home_visible is not None else False
+
+    if home_visible:
+        await db.execute(update(Contest).values(home_visible=False))
 
     contest = Contest(
         title=payload.title,
         description=payload.description,
         phase=(payload.phase.value if payload.phase else ContestPhase.UPCOMING.value),
         visibility=visibility_value,
+        home_visible=home_visible,
         banner_url=banner_url,
         rules_md=payload.rules_md,
         prizes_md=payload.prizes_md,
         review_rules_md=payload.review_rules_md,
         faq_md=payload.faq_md,
+        template_config=payload.template_config,
         signup_start=payload.signup_start,
         signup_end=payload.signup_end,
         submit_start=payload.submit_start,
@@ -801,6 +833,10 @@ async def update_contest(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="比赛不存在")
 
     update_data = payload.model_dump(exclude_unset=True)
+    if update_data.get("home_visible") is True:
+        await db.execute(
+            update(Contest).where(Contest.id != contest_id).values(home_visible=False)
+        )
     if "banner_url" in update_data:
         update_data["banner_url"] = ensure_local_media_url(update_data.get("banner_url"), "赛事 Banner")
     schedule = {

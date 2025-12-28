@@ -1044,7 +1044,7 @@ function ChallengeCard({
                   </pre>
                   {level.contentType === 'final-boss' && (
                     <p className="text-xs text-slate-400 dark:text-slate-500">
-                      {/* champion_ + ??? = answer | hint: check page source */}
+                      {/* 口令格式：champion_ + [密钥] = answer | 提示：查看页面源码 */}
                     </p>
                   )}
                 </div>

@@ -112,7 +112,7 @@ export default function AnnouncementBanner() {
     <>
       {/* 顶部横幅公告 - 未关闭的公告显示在这里 */}
       {currentBanner && bannerTypeConfig && (
-        <div className="fixed top-16 left-0 right-0 z-40 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="sticky top-16 z-40 animate-in fade-in slide-in-from-top-2 duration-300">
           <div className={`relative bg-gradient-to-r ${bannerTypeConfig.bannerBg} bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/50 dark:border-slate-700/50`}>
             <div className="max-w-7xl mx-auto px-4 py-2.5">
               <div className="flex items-center gap-4">

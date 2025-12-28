@@ -12,109 +12,166 @@ import ContestantDashboard from '../components/contestant/ContestantDashboard'
 import { useAuthStore } from '../stores/authStore'
 import { useRegistrationStore } from '../stores/registrationStore'
 import { contestApi } from '../services'
-import { useContestId } from '@/hooks/useContestId'
 
 /**
- * 首页 - 活动介绍
+ * 首页 - 比赛展示与参赛入口
  */
 export default function HomePage() {
   const user = useAuthStore((s) => s.user)
   const registration = useRegistrationStore((s) => s.registration)
   const status = useRegistrationStore((s) => s.status)
   const checkStatus = useRegistrationStore((s) => s.checkStatus)
-  const { contestId } = useContestId()
-  const [contest, setContest] = useState(null)
+  const [featuredContest, setFeaturedContest] = useState(null)
+  const [contests, setContests] = useState([])
+  const [selectedContestId, setSelectedContestId] = useState(null)
+  const [loadingContest, setLoadingContest] = useState(true)
 
   useEffect(() => {
     let active = true
     const loadContest = async () => {
+      setLoadingContest(true)
+      let homepageContest = null
       try {
-        const data = await contestApi.get(contestId)
-        if (active) {
-          setContest(data)
-        }
+        homepageContest = await contestApi.getHomepage()
       } catch (error) {
-        if (active) {
-          setContest(null)
+        if (error?.response?.status !== 404) {
+          console.error('加载首页展示比赛失败', error)
         }
       }
+
+      let list = []
+      try {
+        const data = await contestApi.list()
+        list = data.items || []
+      } catch (error) {
+        console.error('加载比赛列表失败', error)
+      }
+
+      if (!active) return
+      setFeaturedContest(homepageContest)
+      setContests(list)
+      if (homepageContest?.id) {
+        setSelectedContestId(homepageContest.id)
+      } else {
+        setSelectedContestId(null)
+      }
+      setLoadingContest(false)
     }
-    if (contestId) {
-      loadContest()
-    }
+
+    loadContest()
     return () => {
       active = false
     }
-  }, [contestId])
+  }, [])
 
-  // 首次加载时检查报名状态
+  const activeContest = contests.find((item) => item.id === selectedContestId) || featuredContest
+  const activeContestId = activeContest?.id
+  const templateConfig = activeContest?.template_config || null
+  const showContestSections = Boolean(featuredContest)
+
   useEffect(() => {
-    if (user && status === 'unknown') {
-      checkStatus(contestId)
-    }
-  }, [user, status, contestId, checkStatus])
+    if (!user || !activeContestId || user.role !== 'contestant') return
+    checkStatus(activeContestId).catch(() => {})
+  }, [user, activeContestId, checkStatus])
 
-  // 是否显示参赛者仪表盘 - 仅参赛者角色可见
+  // 参赛者看板 - 仅在已报名且未撤回时展示
   const isContestant = user?.role === 'contestant'
-  const showDashboard = isContestant && registration && status !== 'none' && status !== 'unknown' && status !== 'withdrawn'
-  const hasPrizes = Boolean(contest?.prizes_md && contest.prizes_md.trim())
-  const hasRules = Boolean(contest?.rules_md && contest.rules_md.trim())
-  const hasReviewRules = Boolean(contest?.review_rules_md && contest.review_rules_md.trim())
-  const hasFaq = Boolean(contest?.faq_md && contest.faq_md.trim())
+  const showDashboard =
+    showContestSections &&
+    isContestant &&
+    registration &&
+    status !== 'none' &&
+    status !== 'unknown' &&
+    status !== 'withdrawn'
+  const hasPrizes = Boolean(activeContest?.prizes_md && activeContest.prizes_md.trim())
+  const hasRules = Boolean(activeContest?.rules_md && activeContest.rules_md.trim())
+  const hasReviewRules = Boolean(activeContest?.review_rules_md && activeContest.review_rules_md.trim())
+  const hasFaq = Boolean(activeContest?.faq_md && activeContest.faq_md.trim())
+
+  const handleContestChange = (event) => {
+    const value = event.target.value
+    setSelectedContestId(value ? Number(value) : null)
+  }
 
   return (
     <>
       <HeroSection />
 
-      {contest?.banner_url && (
-        <section className="py-10 bg-slate-100 dark:bg-slate-950">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-lg">
-              <img
-                src={contest.banner_url}
-                alt="赛事 Banner"
-                className="w-full h-auto object-cover"
-                loading="lazy"
-              />
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 参赛者仪表盘 - 已报名用户显示（优先展示） */}
-      {showDashboard && (
-        <section className="relative py-12 sm:py-16 bg-slate-100 dark:bg-slate-950">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            <ContestantDashboard />
-          </div>
-        </section>
-      )}
-
-      {/* 热门项目轮播 - 显示人气榜前几名 */}
-      <HotProjectsCarousel contestId={contestId} />
-
-      {/* 热门竞猜 - 显示进行中的竞猜活动 */}
-      <HotBettingSection />
-
-      {/* 实时动态 */}
-      <LiveFeedSection contestId={contestId} />
-
-      <IntroSection />
-      {hasPrizes ? (
-        <MarkdownSection title="奖项设置" content={contest?.prizes_md} id="prizes" />
-      ) : (
-        <PrizesSection />
-      )}
-      {hasRules || hasReviewRules ? (
+      {showContestSections && (
         <>
-          <MarkdownSection title="赛事规则" content={contest?.rules_md} id="rules" />
-          <MarkdownSection title="评审规则" content={contest?.review_rules_md} id="judging" />
+          {contests.length > 1 && (
+            <section className="py-6 bg-slate-100 dark:bg-slate-950">
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    选择比赛
+                  </div>
+                  <select
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    value={selectedContestId ?? ''}
+                    onChange={handleContestChange}
+                    disabled={loadingContest}
+                  >
+                    {contests.map((contest) => (
+                      <option key={contest.id} value={contest.id}>
+                        {contest.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeContest?.banner_url && (
+            <section className="py-10 bg-slate-100 dark:bg-slate-950">
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-lg">
+                  <img
+                    src={activeContest.banner_url}
+                    alt="比赛横幅"
+                    className="w-full h-auto object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* 参赛者看板 - 仅在报名有效时展示 */}
+          {showDashboard && (
+            <section className="relative py-12 sm:py-16 bg-slate-100 dark:bg-slate-950">
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <ContestantDashboard contestId={activeContestId} />
+              </div>
+            </section>
+          )}
+
+          {/* 热门作品 - 跟随当前比赛 */}
+          <HotProjectsCarousel contestId={activeContestId} />
+
+          {/* 热度竞猜 - 暂时不区分比赛 */}
+          <HotBettingSection />
+
+          {/* 实时动态 - 跟随当前比赛 */}
+          <LiveFeedSection contestId={activeContestId} />
+
+          <IntroSection />
+          <PrizesSection templateConfig={templateConfig} />
+          {hasPrizes && (
+            <MarkdownSection title="奖项补充说明" content={activeContest?.prizes_md} id="prizes-extra" />
+          )}
+          <RulesSection templateConfig={templateConfig} />
+          {hasRules && (
+            <MarkdownSection title="规则补充说明" content={activeContest?.rules_md} id="rules-extra" />
+          )}
+          {hasReviewRules && (
+            <MarkdownSection title="评审补充说明" content={activeContest?.review_rules_md} id="judging-extra" />
+          )}
+          {hasFaq && <MarkdownSection title="常见问题补充" content={activeContest?.faq_md} id="faq" />}
+          <CTASection contestPhase={activeContest?.phase} contestId={activeContestId} />
         </>
-      ) : (
-        <RulesSection />
       )}
-      {hasFaq && <MarkdownSection title="常见问题" content={contest?.faq_md} id="faq" />}
-      <CTASection contestPhase={contest?.phase} />
     </>
   )
 }
