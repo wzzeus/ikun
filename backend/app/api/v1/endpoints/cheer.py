@@ -22,7 +22,8 @@ from app.models.registration import Registration, RegistrationStatus
 from app.models.cheer import Cheer, CheerType, CheerStats
 from app.models.user import User
 from app.models.points import UserItem
-from app.api.v1.endpoints.registration import get_current_user, get_optional_user, get_contest_or_404
+from app.api.v1.endpoints.registration import get_contest_or_404
+from app.core.dependencies import get_current_user, get_optional_user
 from app.services import achievement_service
 
 # 道具分数配置（给选手加的分数）

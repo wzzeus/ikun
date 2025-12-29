@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.api.v1.endpoints.registration import get_current_user, get_optional_user
+from app.core.dependencies import get_current_user, get_optional_user
 from app.models.user import User, UserRole
 from app.models.announcement import Announcement
 from app.schemas.announcement import (

@@ -1,7 +1,7 @@
 -- ============================================================================
--- 012 - 评审员评分表
+-- 038 - 评审员评分表
 -- 数据库: MySQL 8.x
--- 执行方式: mysql -u root -proot -P 3306 chicken_king < backend/sql/012_submission_reviews.sql
+-- 执行方式: mysql -u root -proot -P 3306 chicken_king < backend/sql/038_submission_reviews.sql
 -- ============================================================================
 
 USE `chicken_king`;

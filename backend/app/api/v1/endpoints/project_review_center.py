@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.v1.endpoints.submission import get_current_user
+from app.core.dependencies import get_current_user
 from app.core.database import get_db
 from app.models.project import Project
 from app.models.project_review import ProjectReview

@@ -1027,6 +1027,12 @@ export default function ActivityCenterPage() {
   // 兑换券刷新触发器
   const [ticketRefreshTrigger, setTicketRefreshTrigger] = useState(0)
 
+  useEffect(() => {
+    if (!token) {
+      navigate('/login?next=/activity', { replace: true })
+    }
+  }, [token, navigate])
+
   // 加载余额
   const loadBalance = useCallback(async () => {
     setBalanceLoading(true)
@@ -1104,7 +1110,6 @@ export default function ActivityCenterPage() {
 
   useEffect(() => {
     if (!token) {
-      navigate('/login')
       return
     }
     // 并行加载所有数据
@@ -1113,7 +1118,15 @@ export default function ActivityCenterPage() {
     loadLottery()
     loadMarkets()
     loadItems()
-  }, [token, navigate, loadBalance, loadSignin, loadLottery, loadMarkets, loadItems])
+  }, [token, loadBalance, loadSignin, loadLottery, loadMarkets, loadItems])
+
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500">
+        正在跳转登录...
+      </div>
+    )
+  }
 
   const handleSignin = async () => {
     if (signing || signinStatus?.signed_today) return

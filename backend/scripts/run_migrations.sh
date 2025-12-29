@@ -13,6 +13,13 @@ MYSQL_DATABASE="${MYSQL_DATABASE:-chicken_king}"
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
 MIGRATION_BASELINE_VERSION="${MIGRATION_BASELINE_VERSION:-}"
 
+# 历史迁移重命名映射（新版本 -> 旧版本）
+declare -A MIGRATION_ALIASES=(
+  ["038_submission_reviews"]="012_submission_reviews"
+  ["039_slot_machine_config"]="019_slot_machine_config"
+  ["040_user_stats_gacha_fields"]="022_user_stats_gacha_fields"
+)
+
 if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
   log "缺少 MYSQL_ROOT_PASSWORD，无法执行迁移"
   exit 1
@@ -39,6 +46,13 @@ sha256_file() {
     return 0
   fi
   echo "no-checksum"
+}
+
+resolve_legacy_version() {
+  local version="$1"
+  if [ -n "${MIGRATION_ALIASES[$version]:-}" ]; then
+    echo "${MIGRATION_ALIASES[$version]}"
+  fi
 }
 
 db_query() {
@@ -250,6 +264,17 @@ run_migrations() {
         log "跳过已执行迁移: $base"
       fi
       continue
+    fi
+
+    local legacy_version legacy_checksum
+    legacy_version="$(resolve_legacy_version "$version")"
+    if [ -n "$legacy_version" ]; then
+      legacy_checksum="$(db_query "SELECT checksum FROM schema_migrations WHERE version='$(sql_escape "$legacy_version")' LIMIT 1;")"
+      if [ -n "$legacy_checksum" ]; then
+        log "检测到旧版本 $legacy_version 已执行，跳过并标记新版本 $version"
+        db_exec "INSERT INTO schema_migrations (version, version_num, filename, checksum) VALUES ('$(sql_escape "$version")', $version_num_int, '$(sql_escape "$base")', '$(sql_escape "$checksum")');"
+        continue
+      fi
     fi
 
     log "执行迁移: $base"

@@ -917,6 +917,7 @@ CREATE TABLE `points_ledger` (
   UNIQUE KEY `idx_request_id` (`request_id`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_created_at` (`created_at`),
+  KEY `idx_user_created_at` (`user_id`, `created_at`),
   KEY `idx_ref` (`ref_type`,`ref_id`),
   CONSTRAINT `points_ledger_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=1296 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='积分流水表';
@@ -953,6 +954,7 @@ CREATE TABLE `prediction_bets` (
   UNIQUE KEY `idx_request_id` (`request_id`),
   KEY `idx_market_id` (`market_id`),
   KEY `idx_user_id` (`user_id`),
+  KEY `idx_user_market` (`user_id`, `market_id`),
   KEY `idx_option_id` (`option_id`),
   CONSTRAINT `prediction_bets_ibfk_1` FOREIGN KEY (`market_id`) REFERENCES `prediction_markets` (`id`) ON DELETE CASCADE,
   CONSTRAINT `prediction_bets_ibfk_2` FOREIGN KEY (`option_id`) REFERENCES `prediction_options` (`id`) ON DELETE CASCADE,
@@ -1536,6 +1538,7 @@ CREATE TABLE `submissions` (
   KEY `ix_submissions_contest` (`contest_id`),
   KEY `ix_submissions_status` (`status`),
   KEY `ix_submissions_vote_count` (`vote_count` DESC),
+  KEY `ix_submissions_contest_status_vote` (`contest_id`, `status`, `vote_count` DESC),
   KEY `ix_submissions_registration` (`registration_id`),
   KEY `ix_submissions_reviewer` (`reviewer_id`),
   KEY `idx_final_score` (`final_score` DESC),
@@ -2137,6 +2140,7 @@ CREATE TABLE `project_submissions` (
   KEY `ix_project_submissions_contest` (`contest_id`),
   KEY `ix_project_submissions_user` (`user_id`),
   KEY `ix_project_submissions_status` (`status`),
+  KEY `ix_project_submissions_contest_status` (`contest_id`, `status`),
   KEY `ix_project_submissions_submitted` (`submitted_at`),
   CONSTRAINT `fk_project_submissions_project_id` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_project_submissions_contest_id` FOREIGN KEY (`contest_id`) REFERENCES `contests` (`id`) ON DELETE CASCADE,

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.endpoints.registration import get_current_user
+from app.core.dependencies import get_current_user
 from app.models.user import User, UserRole
 from app.models.task import TaskSchedule, TaskType
 from app.services.task_service import TaskService

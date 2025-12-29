@@ -2791,7 +2791,7 @@ function SlotMachineManagePanel() {
       <div className="text-center py-12">
         <Dice1 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
         <p className="text-slate-500 dark:text-slate-400 mb-4">老虎机配置不存在</p>
-        <p className="text-sm text-slate-400">请先执行数据库迁移脚本 019_slot_machine_config.sql</p>
+        <p className="text-sm text-slate-400">请先执行数据库迁移脚本 039_slot_machine_config.sql</p>
       </div>
     )
   }

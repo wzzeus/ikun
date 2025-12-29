@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.api.v1.endpoints.user import get_current_user_dep as get_current_user, get_current_user_optional
+from app.core.dependencies import get_current_user, get_current_user_optional
 from app.models.user import User
 from app.models.slot_machine import SlotMachineRule, SlotMachineConfig, SlotRuleType
 from app.services.slot_machine_service import SlotMachineService

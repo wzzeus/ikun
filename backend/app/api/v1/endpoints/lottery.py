@@ -10,7 +10,7 @@ from typing import Optional, List
 
 from app.core.database import get_db
 from app.core.rate_limit import limiter, RateLimits
-from app.api.v1.endpoints.user import get_current_user_dep as get_current_user, get_current_user_optional
+from app.core.dependencies import get_current_user, get_current_user_optional
 from app.models.user import User
 from app.models.points import ApiKeyCode, ApiKeyStatus
 from app.services.lottery_service import LotteryService

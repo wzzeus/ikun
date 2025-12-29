@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS `submissions` (
   KEY `ix_submissions_contest` (`contest_id`),
   KEY `ix_submissions_status` (`status`),
   KEY `ix_submissions_vote_count` (`vote_count` DESC),
+  KEY `ix_submissions_contest_status_vote` (`contest_id`, `status`, `vote_count` DESC),
   CONSTRAINT `fk_submissions_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_submissions_contest_id` FOREIGN KEY (`contest_id`) REFERENCES `contests` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='作品提交表';
@@ -204,6 +205,7 @@ CREATE TABLE IF NOT EXISTS `project_submissions` (
   KEY `ix_project_submissions_contest` (`contest_id`),
   KEY `ix_project_submissions_user` (`user_id`),
   KEY `ix_project_submissions_status` (`status`),
+  KEY `ix_project_submissions_contest_status` (`contest_id`, `status`),
   KEY `ix_project_submissions_submitted` (`submitted_at`),
   CONSTRAINT `fk_project_submissions_project_id` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_project_submissions_contest_id` FOREIGN KEY (`contest_id`) REFERENCES `contests` (`id`) ON DELETE CASCADE,

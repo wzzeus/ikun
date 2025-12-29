@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.api.v1.endpoints.user import get_current_user_dep as get_current_user
+from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.user import UserUpdateRequest as BaseUserUpdateRequest
 from app.models.points import (

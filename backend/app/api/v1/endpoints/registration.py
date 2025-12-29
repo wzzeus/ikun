@@ -11,14 +11,14 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.dependencies import get_current_user, get_optional_user
 from app.core.database import get_db
-from app.core.security import decode_token
 from app.models.contest import Contest, ContestPhase
 from app.models.project import Project, ProjectStatus
 from app.models.project_submission import ProjectSubmission, ProjectSubmissionStatus
@@ -33,92 +33,6 @@ from app.services.worker_queue import enqueue_worker_action
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# 依赖注入
-# ============================================================================
-
-async def get_current_user(
-    authorization: str = Header(None, alias="Authorization"),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """
-    JWT 认证依赖：解析 Bearer Token 并返回当前用户
-
-    Raises:
-        HTTPException 401: Token 无效或用户不存在
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="请先登录",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1].strip()
-    payload = decode_token(token)
-
-    if not payload or "sub" not in payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="登录已过期，请重新登录",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    try:
-        user_id = int(payload["sub"])
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的认证信息",
-        )
-
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户不存在",
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="账号已被禁用",
-        )
-
-    return user
-
-
-async def get_optional_user(
-    authorization: Optional[str] = Header(None, alias="Authorization"),
-    db: AsyncSession = Depends(get_db),
-) -> Optional[User]:
-    """可选的用户认证：未登录时返回 None"""
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-
-    try:
-        token = authorization.split(" ", 1)[1].strip()
-        payload = decode_token(token)
-
-        if not payload or "sub" not in payload:
-            return None
-
-        user_id = int(payload["sub"])
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-
-        if user and user.is_active:
-            return user
-    except (TypeError, ValueError) as e:
-        logger.debug(f"Token 解析失败: {e}")
-    except Exception as e:
-        logger.warning(f"可选用户认证异常: {e}")
-
-    return None
 
 
 # ============================================================================

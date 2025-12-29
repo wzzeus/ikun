@@ -26,7 +26,7 @@ from app.core.security import create_access_token, decode_token, get_password_ha
 from app.models.user import User
 from app.models.password_reset import PasswordResetToken
 from app.schemas.user import UserResponse
-from app.api.v1.endpoints.user import get_current_user_dep
+from app.core.dependencies import get_current_user_dep
 from app.services.email_service import send_email, EmailServiceError
 from app.services.security_challenge import guard_challenge
 from app.services.user_merge_service import merge_users

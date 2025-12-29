@@ -40,7 +40,7 @@ from app.schemas.review_center import (
 )
 
 # 复用 submission.py 中的认证依赖
-from app.api.v1.endpoints.submission import get_current_user
+from app.core.dependencies import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

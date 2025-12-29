@@ -23,7 +23,7 @@ from app.models.achievement import AchievementDefinition, UserStats, UserAchieve
 from app.models.points import PointsReason, PointsLedger
 from app.services import achievement_service
 from app.services.points_service import PointsService
-from app.api.v1.endpoints.registration import get_current_user, get_optional_user
+from app.core.dependencies import get_current_user, get_optional_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

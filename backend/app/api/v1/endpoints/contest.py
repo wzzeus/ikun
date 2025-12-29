@@ -13,7 +13,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.v1.endpoints.submission import get_current_user, get_optional_user
+from app.core.dependencies import get_current_user, get_optional_user
 from app.core.database import get_db
 from app.core.rate_limit import limiter, RateLimits
 from app.models.contest import Contest, ContestPhase, ContestVisibility

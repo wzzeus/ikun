@@ -1,4 +1,4 @@
--- 022_user_stats_gacha_fields.sql
+-- 040_user_stats_gacha_fields.sql
 -- 添加扭蛋机、竞猜和任务统计字段到 user_stats 表
 -- 修复 gacha_draws 表缺少 updated_at 字段的问题
 

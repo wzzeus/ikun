@@ -11,7 +11,7 @@ from typing import List, Optional
 import json
 
 from app.core.database import get_db
-from app.api.v1.endpoints.user import get_current_user_dep as get_current_user, get_current_user_optional
+from app.core.dependencies import get_current_user, get_current_user_optional
 from app.models.user import User
 
 router = APIRouter()

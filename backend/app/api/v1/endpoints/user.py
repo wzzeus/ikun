@@ -2,17 +2,16 @@
 用户相关 API
 """
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, status, File, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dependencies import get_current_user_dep, get_current_user_optional
 from app.core.database import get_db
 from app.core.rate_limit import limiter, RateLimits
-from app.core.security import decode_token
-from app.core.config import settings
 from app.models.user import User
 from app.schemas.user import UserResponse, UserPublicResponse, UserUpdateRequest
 from app.services.media_service import AVATAR_MAX_BYTES, delete_media_file, save_upload_file
@@ -25,82 +24,6 @@ VALID_ROLES = ["admin", "reviewer", "contestant", "spectator"]
 # 用户自选角色白名单（只能选这两个）
 SELECTABLE_ROLES = ["contestant", "spectator"]
 
-
-
-async def get_current_user_optional(
-    authorization: str = Header(None, alias="Authorization"),
-    db: AsyncSession = Depends(get_db),
-) -> Optional[User]:
-    """可选 JWT 认证依赖，未登录返回 None"""
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-
-    token = authorization.split(" ", 1)[1].strip()
-    payload = decode_token(token)
-
-    if not payload or "sub" not in payload:
-        return None
-
-    try:
-        user_id = int(payload["sub"])
-    except (TypeError, ValueError):
-        return None
-
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if user is None or not user.is_active:
-        return None
-
-    return user
-
-
-async def get_current_user_dep(
-    authorization: str = Header(None, alias="Authorization"),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """JWT 认证依赖"""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="请先登录",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1].strip()
-    payload = decode_token(token)
-
-    if not payload or "sub" not in payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="登录已过期，请重新登录",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    try:
-        user_id = int(payload["sub"])
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的认证信息",
-        )
-
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户不存在",
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="账号已被禁用",
-        )
-
-    return user
 
 
 @router.get("/me", response_model=UserResponse, summary="获取当前用户信息")
